@@ -10051,3 +10051,12 @@ exec "$@"
       return self.skipTest('no shell to test')
     self.run_process([EMCC, path_from_root('tests', 'hello_world.c'), '-Oz'])
     self.assertContained('hello, world!', self.run_js('a.out.js', engine=config.V8_ENGINE))
+
+  def test_no_main_with_PROXY_TO_PTHREAD(self):
+    create_test_file('lib.cpp', r'''
+#include <emscripten.h>
+EMSCRIPTEN_KEEPALIVE
+void foo() {}
+''')
+    err = self.expect_fail([EMCC, 'lib.cpp', '-pthread', '-sPROXY_TO_PTHREAD'])
+    self.assertContained('emcc: error: PROXY_TO_PTHREAD proxies main() for you, but no main exists', err)
