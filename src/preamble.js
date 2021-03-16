@@ -940,7 +940,7 @@ function createWasm() {
     Module['asm'] = exports;
 
 #if !IMPORTED_MEMORY
-    wasmMemory = Module['asm']['memory'];
+    wasmMemory = exports['memory'];
 #if ASSERTIONS
     assert(wasmMemory, "memory not found in wasm exports");
     // This assertion doesn't hold when emscripten is run in --post-link
@@ -955,14 +955,14 @@ function createWasm() {
 #endif
 
 #if !RELOCATABLE
-    wasmTable = Module['asm']['__indirect_function_table'];
+    wasmTable = exports['__indirect_function_table'];
 #if ASSERTIONS && !PURE_WASI
     assert(wasmTable, "table not found in wasm exports");
 #endif
 #endif
 
 #if '___wasm_call_ctors' in IMPLEMENTED_FUNCTIONS
-    addOnInit(Module['asm']['__wasm_call_ctors']);
+    addOnInit(exports['__wasm_call_ctors']);
 #endif
 
 #if ABORT_ON_WASM_EXCEPTIONS
