@@ -115,9 +115,7 @@
     "await"
   ],
   "license": "BSD-2-Clause",
-
   "main": "terser.js",
-
   "zmain": "dist/bundle.js",
   "maintainers": [
     {
