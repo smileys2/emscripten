@@ -54,19 +54,13 @@ def make_command(filename, engine, args=[]):
 
 
 def check_engine(engine):
-  if type(engine) is list:
-    engine_path = engine[0]
-  else:
-    engine_path = engine
+  engine_path = engine[0] if type(engine) is list else engine
   global WORKING_ENGINES
   if engine_path not in WORKING_ENGINES:
     logging.debug('Checking JS engine %s' % engine)
     try:
       output = run_js(shared.path_from_root('tests', 'hello_world.js'), engine, skip_check=True)
-      if 'hello, world!' in output:
-        WORKING_ENGINES[engine_path] = True
-      else:
-        WORKING_ENGINES[engine_path] = False
+      WORKING_ENGINES[engine_path] = 'hello, world!' in output
     except Exception as e:
       logging.info('Checking JS engine %s failed. Check your config file. Details: %s' % (str(engine), str(e)))
       WORKING_ENGINES[engine_path] = False
@@ -117,10 +111,7 @@ def run_js(filename, engine, args=[],
   out = ['' if o is None else o for o in (stdout, stderr)]
   ret = '\n'.join(out) if full_output else out[0]
 
-  if assert_returncode == NON_ZERO:
-    if proc.returncode == 0:
-      raise CalledProcessError(proc.returncode, ' '.join(command), str(ret))
-  elif proc.returncode != assert_returncode:
+  if (assert_returncode == NON_ZERO and proc.returncode == 0 or
+      assert_returncode != NON_ZERO and proc.returncode != assert_returncode):
     raise CalledProcessError(proc.returncode, ' '.join(command), str(ret))
-
   return ret

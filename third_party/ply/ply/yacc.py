@@ -145,8 +145,7 @@ def format_result(r):
     if '\n' in repr_str: repr_str = repr(repr_str)
     if len(repr_str) > resultlimit:
         repr_str = repr_str[:resultlimit]+" ..."
-    result = "<%s @ 0x%x> (%s)" % (type(r).__name__,id(r),repr_str)
-    return result
+    return "<%s @ 0x%x> (%s)" % (type(r).__name__,id(r),repr_str)
 
 
 # Format stack entries when the parser is running in debug mode
@@ -305,12 +304,7 @@ class LRParser:
         if input is not None:
             lexer.input(input)
 
-        if tokenfunc is None:
-           # Tokenize function
-           get_token = lexer.token
-        else:
-           get_token = tokenfunc
-
+        get_token = lexer.token if tokenfunc is None else tokenfunc
         # Set up the state and symbol stacks
 
         statestack = [ ]                # Stack of parsing states
@@ -336,16 +330,14 @@ class LRParser:
             # --! DEBUG
             debug.debug('')
             debug.debug('State  : %s', state)
-            # --! DEBUG
-
             if not lookahead:
                 if not lookaheadstack:
                     lookahead = get_token()     # Get the next token
                 else:
                     lookahead = lookaheadstack.pop()
-                if not lookahead:
-                    lookahead = YaccSymbol()
-                    lookahead.type = "$end"
+            if not lookahead:
+                lookahead = YaccSymbol()
+                lookahead.type = "$end"
 
             # --! DEBUG
             debug.debug('Stack  : %s',
@@ -361,7 +353,7 @@ class LRParser:
                     # shift a symbol on the stack
                     statestack.append(t)
                     state = t
-                    
+
                     # --! DEBUG
                     debug.debug("Action : Shift and goto state %s", t)
                     # --! DEBUG
@@ -389,7 +381,7 @@ class LRParser:
                         debug.info("Action : Reduce rule [%s] with %s and goto state %d", p.str, "["+",".join([format_stack_entry(_v.value) for _v in symstack[-plen:]])+"]",-t)
                     else:
                         debug.info("Action : Reduce rule [%s] with %s and goto state %d", p.str, [],-t)
-                        
+
                     # --! DEBUG
 
                     if plen:
@@ -413,7 +405,7 @@ class LRParser:
                         # changes get made in both locations.
 
                         pslice.slice = targ
-                        
+
                         try:
                             # Call the grammar rule with our special slice object
                             del symstack[-plen:]
@@ -435,9 +427,8 @@ class LRParser:
                             lookahead = sym
                             errorcount = error_count
                             self.errorok = 0
-                        continue
-                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    
+                                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
                     else:
 
                         # --! TRACKING
@@ -474,9 +465,9 @@ class LRParser:
                             lookahead = sym
                             errorcount = error_count
                             self.errorok = 0
-                        continue
-                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                                        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+                    continue
                 if t == 0:
                     n = symstack[-1]
                     result = getattr(n,"value",None)
@@ -486,7 +477,7 @@ class LRParser:
                     # --! DEBUG
                     return result
 
-            if t == None:
+            if t is None:
 
                 # --! DEBUG
                 debug.error('Error  : %s',
@@ -528,8 +519,7 @@ class LRParser:
                             continue
                     else:
                         if errtoken:
-                            if hasattr(errtoken,"lineno"): lineno = lookahead.lineno
-                            else: lineno = 0
+                            lineno = lookahead.lineno if hasattr(errtoken,"lineno") else 0
                             if lineno:
                                 sys.stderr.write("yacc: Syntax error at line %d, token=%s\n" % (lineno, errtoken.type))
                             else:

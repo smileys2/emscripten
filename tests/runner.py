@@ -242,10 +242,10 @@ def limit_size(string, maxbytes=800000 * 20, maxlines=100000, max_line=5000):
     if len(line) > max_line:
       lines[i] = line[:max_line] + '[..]'
   if len(lines) > maxlines:
-    lines = lines[0:maxlines // 2] + ['[..]'] + lines[-maxlines // 2:]
+    lines = lines[:maxlines // 2] + ['[..]'] + lines[-maxlines // 2:]
   string = '\n'.join(lines) + '\n'
   if len(string) > maxbytes:
-    string = string[0:maxbytes // 2] + '\n[..]\n' + string[-maxbytes // 2:]
+    string = string[:maxbytes // 2] + '\n[..]\n' + string[-maxbytes // 2:]
   return string
 
 
@@ -401,9 +401,7 @@ class RunnerCore(unittest.TestCase, metaclass=RunnerMeta):
     elif '--memory-init-file' in self.emcc_args:
       return int(self.emcc_args[self.emcc_args.index('--memory-init-file') + 1])
     else:
-      # side modules handle memory differently; binaryen puts the memory in the wasm module
-      opt_supports = any(opt in self.emcc_args for opt in ('-O2', '-O3', '-Os', '-Oz'))
-      return opt_supports
+      return any(opt in self.emcc_args for opt in ('-O2', '-O3', '-Os', '-Oz'))
 
   def set_temp_dir(self, temp_dir):
     self.temp_dir = temp_dir
@@ -464,36 +462,40 @@ class RunnerCore(unittest.TestCase, metaclass=RunnerMeta):
           self.has_prev_ll = True
 
   def tearDown(self):
-    if not EMTEST_SAVE_DIR:
-      # rmtree() fails on Windows if the current working directory is inside the tree.
-      os.chdir(os.path.dirname(self.get_dir()))
-      try_delete(self.get_dir())
+    if EMTEST_SAVE_DIR:
+      return
+    # rmtree() fails on Windows if the current working directory is inside the tree.
+    os.chdir(os.path.dirname(self.get_dir()))
+    try_delete(self.get_dir())
 
-      if EMTEST_DETECT_TEMPFILE_LEAKS and not DEBUG:
-        temp_files_after_run = []
-        for root, dirnames, filenames in os.walk(self.temp_dir):
-          for dirname in dirnames:
-            temp_files_after_run.append(os.path.normpath(os.path.join(root, dirname)))
-          for filename in filenames:
-            temp_files_after_run.append(os.path.normpath(os.path.join(root, filename)))
+    if EMTEST_DETECT_TEMPFILE_LEAKS and not DEBUG:
+      temp_files_after_run = []
+      for root, dirnames, filenames in os.walk(self.temp_dir):
+        for dirname in dirnames:
+          temp_files_after_run.append(os.path.normpath(os.path.join(root, dirname)))
+        for filename in filenames:
+          temp_files_after_run.append(os.path.normpath(os.path.join(root, filename)))
 
-        # Our leak detection will pick up *any* new temp files in the temp dir.
-        # They may not be due to us, but e.g. the browser when running browser
-        # tests. Until we figure out a proper solution, ignore some temp file
-        # names that we see on our CI infrastructure.
-        ignorable_file_prefixes = [
-          '/tmp/tmpaddon',
-          '/tmp/circleci-no-output-timeout',
-          '/tmp/wasmer'
-        ]
+      # Our leak detection will pick up *any* new temp files in the temp dir.
+      # They may not be due to us, but e.g. the browser when running browser
+      # tests. Until we figure out a proper solution, ignore some temp file
+      # names that we see on our CI infrastructure.
+      ignorable_file_prefixes = [
+        '/tmp/tmpaddon',
+        '/tmp/circleci-no-output-timeout',
+        '/tmp/wasmer'
+      ]
 
-        left_over_files = set(temp_files_after_run) - set(self.temp_files_before_run)
-        left_over_files = [f for f in left_over_files if not any([f.startswith(prefix) for prefix in ignorable_file_prefixes])]
-        if len(left_over_files):
-          print('ERROR: After running test, there are ' + str(len(left_over_files)) + ' new temporary files/directories left behind:', file=sys.stderr)
-          for f in left_over_files:
-            print('leaked file: ' + f, file=sys.stderr)
-          self.fail('Test leaked ' + str(len(left_over_files)) + ' temporary files!')
+      left_over_files = set(temp_files_after_run) - set(self.temp_files_before_run)
+      left_over_files = [
+          f for f in left_over_files
+          if not any(f.startswith(prefix) for prefix in ignorable_file_prefixes)
+      ]
+      if len(left_over_files):
+        print('ERROR: After running test, there are ' + str(len(left_over_files)) + ' new temporary files/directories left behind:', file=sys.stderr)
+        for f in left_over_files:
+          print('leaked file: ' + f, file=sys.stderr)
+        self.fail('Test leaked ' + str(len(left_over_files)) + ' temporary files!')
 
   def get_setting(self, key, default=None):
     return self.settings_mods.get(key, default)
@@ -676,20 +678,17 @@ class RunnerCore(unittest.TestCase, metaclass=RunnerMeta):
 
     out = open(stdout, 'r').read()
     err = open(stderr, 'r').read()
-    if output_nicerizer:
-      ret = output_nicerizer(out, err)
-    else:
-      ret = out + err
+    ret = output_nicerizer(out, err) if output_nicerizer else out + err
     if error or EMTEST_VERBOSE:
       ret = limit_size(ret)
       print('-- begin program output --')
       print(ret, end='')
       print('-- end program output --')
-      if error:
-        if assert_returncode == NON_ZERO:
-          self.fail('JS subprocess unexpectedly succeeded (%s):  Output:\n%s' % (error.cmd, ret))
-        else:
-          self.fail('JS subprocess failed (%s): %s.  Output:\n%s' % (error.cmd, error.returncode, ret))
+    if error:
+      if assert_returncode == NON_ZERO:
+        self.fail('JS subprocess unexpectedly succeeded (%s):  Output:\n%s' % (error.cmd, ret))
+      else:
+        self.fail('JS subprocess failed (%s): %s.  Output:\n%s' % (error.cmd, error.returncode, ret))
 
     #  We should pass all strict mode checks
     self.assertNotContained('strict warning:', ret)
@@ -749,7 +748,7 @@ class RunnerCore(unittest.TestCase, metaclass=RunnerMeta):
     if callable(string):
       string = string()
 
-    if not any(v in string for v in values):
+    if all(v not in string for v in values):
       diff = difflib.unified_diff(values[0].split('\n'), string.split('\n'), fromfile='expected', tofile='actual')
       diff = ''.join(a.rstrip() + '\n' for a in diff)
       self.fail("Expected to find '%s' in '%s', diff:\n\n%s\n%s" % (
@@ -1005,10 +1004,7 @@ class RunnerCore(unittest.TestCase, metaclass=RunnerMeta):
     if 'no_build' in kwargs:
       filename = src
     else:
-      if force_c:
-        filename = 'src.c'
-      else:
-        filename = 'src.cpp'
+      filename = 'src.c' if force_c else 'src.cpp'
       with open(filename, 'w') as f:
         f.write(src)
     self._build_and_run(filename, expected_output, **kwargs)
@@ -1139,20 +1135,19 @@ def harness_server_func(in_queue, out_queue, port):
     # Request header handler for default do_GET() path in
     # SimpleHTTPRequestHandler.do_GET(self) below.
     def send_head(self):
-      if self.path.endswith('.js'):
-        path = self.translate_path(self.path)
-        try:
-          f = open(path, 'rb')
-        except IOError:
-          self.send_error(404, "File not found: " + path)
-          return None
-        self.send_response(200)
-        self.send_header('Content-type', 'application/javascript')
-        self.send_header('Connection', 'close')
-        self.end_headers()
-        return f
-      else:
+      if not self.path.endswith('.js'):
         return SimpleHTTPRequestHandler.send_head(self)
+      path = self.translate_path(self.path)
+      try:
+        f = open(path, 'rb')
+      except IOError:
+        self.send_error(404, "File not found: " + path)
+        return None
+      self.send_response(200)
+      self.send_header('Content-type', 'application/javascript')
+      self.send_header('Connection', 'close')
+      self.end_headers()
+      return f
 
     # Add COOP, COEP, CORP, and no-caching headers
     def end_headers(self):
@@ -1378,12 +1373,11 @@ class BrowserCore(RunnerCore):
           try:
             self.assertContained(expectedResult, output)
           except Exception as e:
-            if extra_tries > 0:
-              print('[test error (see below), automatically retrying]')
-              print(e)
-              return self.run_browser(html_file, message, expectedResult, timeout, extra_tries - 1)
-            else:
+            if extra_tries <= 0:
               raise e
+            print('[test error (see below), automatically retrying]')
+            print(e)
+            return self.run_browser(html_file, message, expectedResult, timeout, extra_tries - 1)
       finally:
         time.sleep(0.1) # see comment about Windows above
       self.assert_out_queue_empty('this test')
@@ -1546,7 +1540,7 @@ class BrowserCore(RunnerCore):
       filename = test_file(filename)
     if reference:
       self.reference = reference
-      expected = [str(i) for i in range(0, reference_slack + 1)]
+      expected = [str(i) for i in range(reference_slack + 1)]
       self.reftest(test_file(reference), manually_trigger=manually_trigger_reftest)
       if not manual_reference:
         args += ['--pre-js', 'reftest.js', '-s', 'GL_TESTING']
@@ -1715,7 +1709,7 @@ def get_all_tests(modules):
 def tests_with_expanded_wildcards(args, all_tests):
   # Process wildcards, e.g. "browser.test_pthread_*" should expand to list all pthread tests
   new_args = []
-  for i, arg in enumerate(args):
+  for arg in args:
     if '*' in arg:
       if arg.startswith('skip:'):
         arg = arg[5:]
@@ -1798,11 +1792,9 @@ def choose_random_tests(base, num_tests, relevant_modes):
     chosen.add(new_test)
     if len(chosen) > before:
       print('* ' + new_test)
-    else:
-      # we may have hit the limit
-      if len(chosen) == len(tests) * len(relevant_modes):
-        print('(all possible tests chosen! %d = %d*%d)' % (len(chosen), len(tests), len(relevant_modes)))
-        break
+    elif len(chosen) == len(tests) * len(relevant_modes):
+      print('(all possible tests chosen! %d = %d*%d)' % (len(chosen), len(tests), len(relevant_modes)))
+      break
   return list(chosen)
 
 

@@ -1551,8 +1551,8 @@ keydown(100);keyup(100); // trigger the end
   def test_worker(self):
     # Test running in a web worker
     create_file('file.dat', 'data for worker')
-    html_file = open('main.html', 'w')
-    html_file.write('''
+    with open('main.html', 'w') as html_file:
+      html_file.write('''
       <html>
       <body>
         Worker Test
@@ -1568,8 +1568,6 @@ keydown(100);keyup(100); // trigger the end
       </body>
       </html>
     ''' % self.port)
-    html_file.close()
-
     for file_data in [1, 0]:
       cmd = [EMCC, test_file('hello_world_worker.cpp'), '-o', 'worker.js'] + (['--preload-file', 'file.dat'] if file_data else [])
       print(cmd)
@@ -1584,8 +1582,8 @@ keydown(100);keyup(100); // trigger the end
     main = 'chunked_sync_xhr.html'
     worker_filename = "download_and_checksum_worker.js"
 
-    html_file = open(main, 'w')
-    html_file.write(r"""
+    with open(main, 'w') as html_file:
+      html_file.write(r"""
       <!doctype html>
       <html>
       <head><meta charset="utf-8"><title>Chunked XHR</title></head>
@@ -1620,13 +1618,11 @@ keydown(100);keyup(100); // trigger the end
       </body>
       </html>
     """ % self.port)
-    html_file.close()
-
     c_source_filename = "checksummer.c"
 
     prejs_filename = "worker_prejs.js"
-    prejs_file = open(prejs_filename, 'w')
-    prejs_file.write(r"""
+    with open(prejs_filename, 'w') as prejs_file:
+      prejs_file.write(r"""
       if (typeof(Module) === "undefined") Module = {};
       Module["arguments"] = ["/bigfile"];
       Module["preInit"] = function() {
@@ -1636,7 +1632,6 @@ keydown(100);keyup(100); // trigger the end
       Module["print"] = function(s) { self.postMessage({channel: "stdout", line: s}); };
       Module["printErr"] = function(s) { self.postMessage({channel: "stderr", char: s, trace: ((doTrace && s === 10) ? new Error().stack : null)}); doTrace = false; };
     """)
-    prejs_file.close()
     # vs. os.path.join(self.get_dir(), filename)
     # vs. test_file('hello_world_gles.c')
     self.compile_btest([test_file(c_source_filename), '-g', '-s', 'SMALL_XHR_CHUNKS', '-o', worker_filename,
@@ -4021,8 +4016,8 @@ window.close = function() {
   @requires_sync_compilation
   def test_pthread_global_data_initialization_in_sync_compilation_mode(self):
     mem_init_modes = [[], ['--memory-init-file', '0'], ['--memory-init-file', '1']]
+    args = ['-s', 'WASM_ASYNC_COMPILATION=0']
     for mem_init_mode in mem_init_modes:
-      args = ['-s', 'WASM_ASYNC_COMPILATION=0']
       self.btest(test_file('pthread', 'test_pthread_global_data_initialization.c'), expected='20', args=args + mem_init_mode + ['-s', 'USE_PTHREADS', '-s', 'PROXY_TO_PTHREAD', '-s', 'PTHREAD_POOL_SIZE'])
 
   # Test that emscripten_get_now() reports coherent wallclock times across all pthreads, instead of each pthread independently reporting wallclock times since the launch of that pthread.
@@ -4359,7 +4354,7 @@ window.close = function() {
         # given the synchronous render loop here, asyncify is needed to see intermediate frames and
         # the gradual color change
         cmd += ['-s', 'ASYNCIFY', '-DASYNCIFY']
-      print(str(cmd))
+      print(cmd)
       self.btest('gl_in_proxy_pthread.cpp', expected='1', args=cmd)
 
   @requires_threads
@@ -4370,7 +4365,7 @@ window.close = function() {
       for args2 in [[], ['-DTEST_SYNC_BLOCKING_LOOP=1']]:
         for args3 in [[], ['-s', 'OFFSCREENCANVAS_SUPPORT', '-s', 'OFFSCREEN_FRAMEBUFFER']]:
           cmd = args1 + args2 + args3 + ['-s', 'USE_PTHREADS', '-lGL', '-s', 'GL_DEBUG']
-          print(str(cmd))
+          print(cmd)
           self.btest('resize_offscreencanvas_from_main_thread.cpp', expected='1', args=cmd)
 
   @requires_graphics_hardware
@@ -4449,7 +4444,7 @@ window.close = function() {
     for i in range(14):
       s = s[::-1] + s # length of str will be 2^17=128KB
     with open('largefile.txt', 'w') as f:
-      for i in range(1024):
+      for _ in range(1024):
         f.write(s)
     self.btest('fetch/stream_file.cpp',
                expected='1',
@@ -4919,7 +4914,7 @@ window.close = function() {
     args = ['-s', 'MINIMAL_RUNTIME=2']
     for wasm in [[], ['-s', 'WASM=0', '--memory-init-file', '0'], ['-s', 'WASM=0', '--memory-init-file', '1'], ['-s', 'SINGLE_FILE'], ['-s', 'WASM=0', '-s', 'SINGLE_FILE']]:
       for modularize in [[], ['-s', 'MODULARIZE']]:
-        print(str(args + wasm + modularize))
+        print(args + wasm + modularize)
         self.btest('minimal_hello.c', '0', args=args + wasm + modularize)
 
   # Tests that -s MINIMAL_RUNTIME=1 works well in different build modes

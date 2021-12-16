@@ -4883,11 +4883,7 @@ class StringNode:
   def dump_debug( self, write, margin ):
     # this is used during debugging
     line = margin + "+-"
-    if len( self.letter ) == 0:
-      line += "<NOLETTER>"
-    else:
-      line += self.letter
-
+    line += "<NOLETTER>" if len( self.letter ) == 0 else self.letter
     if self.value:
       line += " => " + repr( self.value )
 
@@ -4900,11 +4896,7 @@ class StringNode:
 
   def locate( self, index ):
     self.index = index
-    if len( self.letter ) > 0:
-      index += len( self.letter ) + 1
-    else:
-      index += 2
-
+    index += len( self.letter ) + 1 if len( self.letter ) > 0 else 2
     if self.value != 0:
       index += 2
 

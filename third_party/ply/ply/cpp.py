@@ -546,10 +546,7 @@ class Preprocessor(object):
                         j += 1
                         continue
                     elif tokens[j].type == self.t_ID:
-                        if tokens[j].value in self.macros:
-                            result = "1L"
-                        else:
-                            result = "0L"
+                        result = "1L" if tokens[j].value in self.macros else "0L"
                         if not needparen: break
                     elif tokens[j].value == '(':
                         needparen = True
@@ -574,7 +571,7 @@ class Preprocessor(object):
                 tokens[i].value = str(tokens[i].value)
                 while tokens[i].value[-1] not in "0123456789abcdefABCDEF":
                     tokens[i].value = tokens[i].value[:-1]
-        
+
         expr = "".join([str(x.value) for x in tokens])
         expr = expr.replace("&&"," and ")
         expr = expr.replace("||"," or ")
@@ -599,7 +596,7 @@ class Preprocessor(object):
 
         if not source:
             source = ""
-            
+
         self.define("__FILE__ \"%s\"" % source)
 
         self.source = source
@@ -617,7 +614,7 @@ class Preprocessor(object):
                 for tok in x:
                     if tok in self.t_WS and '\n' in tok.value:
                         chunk.append(tok)
-                
+
                 dirtokens = self.tokenstrip(x[i+1:])
                 if dirtokens:
                     name = dirtokens[0].value
@@ -625,33 +622,29 @@ class Preprocessor(object):
                 else:
                     name = ""
                     args = []
-                
+
                 if name == 'define':
                     if enable:
-                        for tok in self.expand_macros(chunk):
-                            yield tok
+                        yield from self.expand_macros(chunk)
                         chunk = []
                         self.define(args)
                 elif name == 'include':
                     if enable:
-                        for tok in self.expand_macros(chunk):
-                            yield tok
+                        yield from self.expand_macros(chunk)
                         chunk = []
                         oldfile = self.macros['__FILE__']
-                        for tok in self.include(args):
-                            yield tok
+                        yield from self.include(args)
                         self.macros['__FILE__'] = oldfile
                         self.source = source
                 elif name == 'undef':
                     if enable:
-                        for tok in self.expand_macros(chunk):
-                            yield tok
+                        yield from self.expand_macros(chunk)
                         chunk = []
                         self.undef(args)
                 elif name == 'ifdef':
                     ifstack.append((enable,iftrigger))
                     if enable:
-                        if not args[0].value in self.macros:
+                        if args[0].value not in self.macros:
                             enable = False
                             iftrigger = False
                         else:
@@ -675,23 +668,25 @@ class Preprocessor(object):
                             iftrigger = True
                 elif name == 'elif':
                     if ifstack:
-                        if ifstack[-1][0]:     # We only pay attention if outer "if" allows this
-                            if enable:         # If already true, we flip enable False
+                        if enable:
+                            if ifstack[-1][0]:         # If already true, we flip enable False
                                 enable = False
-                            elif not iftrigger:   # If False, but not triggered yet, we'll check expression
+                        elif not iftrigger:
+                            if ifstack[-1][0]:   # If False, but not triggered yet, we'll check expression
                                 result = self.evalexpr(args)
                                 if result:
                                     enable  = True
                                     iftrigger = True
                     else:
                         self.error(self.source,dirtokens[0].lineno,"Misplaced #elif")
-                        
+
                 elif name == 'else':
                     if ifstack:
-                        if ifstack[-1][0]:
-                            if enable:
+                        if enable:
+                            if ifstack[-1][0]:
                                 enable = False
-                            elif not iftrigger:
+                        elif not iftrigger:
+                            if ifstack[-1][0]:
                                 enable = True
                                 iftrigger = True
                     else:
@@ -702,17 +697,10 @@ class Preprocessor(object):
                         enable,iftrigger = ifstack.pop()
                     else:
                         self.error(self.source,dirtokens[0].lineno,"Misplaced #endif")
-                else:
-                    # Unknown preprocessor directive
-                    pass
+            elif enable:
+                chunk.extend(x)
 
-            else:
-                # Normal text
-                if enable:
-                    chunk.extend(x)
-
-        for tok in self.expand_macros(chunk):
-            yield tok
+        yield from self.expand_macros(chunk)
         chunk = []
 
     # ----------------------------------------------------------------------
@@ -725,28 +713,27 @@ class Preprocessor(object):
         # Try to extract the filename and then process an include file
         if not tokens:
             return
-        if tokens:
-            if tokens[0].value != '<' and tokens[0].type != self.t_STRING:
-                tokens = self.expand_macros(tokens)
+        if tokens[0].value != '<' and tokens[0].type != self.t_STRING:
+            tokens = self.expand_macros(tokens)
 
-            if tokens[0].value == '<':
-                # Include <...>
-                i = 1
-                while i < len(tokens):
-                    if tokens[i].value == '>':
-                        break
-                    i += 1
-                else:
-                    print("Malformed #include <...>")
-                    return
-                filename = "".join([x.value for x in tokens[1:i]])
-                path = self.path + [""] + self.temp_path
-            elif tokens[0].type == self.t_STRING:
-                filename = tokens[0].value[1:-1]
-                path = self.temp_path + [""] + self.path
+        if tokens[0].value == '<':
+            # Include <...>
+            i = 1
+            while i < len(tokens):
+                if tokens[i].value == '>':
+                    break
+                i += 1
             else:
-                print("Malformed #include statement")
+                print("Malformed #include <...>")
                 return
+            filename = "".join([x.value for x in tokens[1:i]])
+            path = self.path + [""] + self.temp_path
+        elif tokens[0].type == self.t_STRING:
+            filename = tokens[0].value[1:-1]
+            path = self.temp_path + [""] + self.path
+        else:
+            print("Malformed #include statement")
+            return
         for p in path:
             iname = os.path.join(p,filename)
             try:
@@ -754,8 +741,7 @@ class Preprocessor(object):
                 dname = os.path.dirname(iname)
                 if dname:
                     self.temp_path.insert(0,dname)
-                for tok in self.parsegen(data,filename):
-                    yield tok
+                yield from self.parsegen(data,filename)
                 if dname:
                     del self.temp_path[0]
                 break
@@ -777,10 +763,7 @@ class Preprocessor(object):
         linetok = tokens
         try:
             name = linetok[0]
-            if len(linetok) > 1:
-                mtype = linetok[1]
-            else:
-                mtype = None
+            mtype = linetok[1] if len(linetok) > 1 else None
             if not mtype:
                 m = Macro(name.value,[])
                 self.macros[name.value] = m

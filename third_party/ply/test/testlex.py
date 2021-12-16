@@ -21,12 +21,10 @@ def make_pymodule_path(filename):
     file = os.path.basename(filename)
     mod, ext = os.path.splitext(file)
 
-    if sys.hexversion >= 0x3020000:
-        modname = mod+"."+imp.get_tag()+ext
-        fullpath = os.path.join(path,'__pycache__',modname)
-    else:
-        fullpath = filename
-    return fullpath
+    if sys.hexversion < 0x3020000:
+        return filename
+    modname = mod+"."+imp.get_tag()+ext
+    return os.path.join(path,'__pycache__',modname)
 
 def pymodule_out_exists(filename):
     return os.path.exists(make_pymodule_path(filename))
@@ -47,10 +45,10 @@ def check_expected(result,expected):
     if len(resultlines) != len(expectedlines):
         return False
 
-    for rline,eline in zip(resultlines,expectedlines):
-        if not rline.endswith(eline):
-            return False
-    return True
+    return all(
+        rline.endswith(eline)
+        for rline, eline in zip(resultlines, expectedlines)
+    )
 
 def run_import(module):
     code = "import "+module

@@ -74,7 +74,7 @@ class WebsockifyServerHarness():
     self.websockify.start()
     self.processes.append(self.websockify)
     # Make sure both the actual server and the websocket proxy are running
-    for i in range(10):
+    for _ in range(10):
       try:
         if self.do_server_check:
             server_sock = socket.create_connection(('localhost', self.target_port), timeout=1)
@@ -228,10 +228,7 @@ class sockets(BrowserCore):
     sockets_include = '-I' + test_file('sockets')
 
     # generate a large string literal to use as our message
-    message = ''
-    for i in range(256 * 256 * 2):
-      message += str(chr(ord('a') + (i % 26)))
-
+    message = ''.join(str(chr(ord('a') + (i % 26))) for i in range(256**2 * 2))
     # re-write the client test with this literal (it's too big to pass via command line)
     input_filename = test_file('sockets', 'test_sockets_echo_client.c')
     input = open(input_filename).read()

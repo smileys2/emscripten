@@ -276,7 +276,7 @@ def will_metadce():
 def setup_environment_settings():
   # Environment setting based on user input
   environments = shared.Settings.ENVIRONMENT.split(',')
-  if any([x for x in environments if x not in VALID_ENVIRONMENTS]):
+  if any(x for x in environments if x not in VALID_ENVIRONMENTS):
     exit_with_error('Invalid environment specified in "ENVIRONMENT": ' + shared.Settings.ENVIRONMENT + '. Should be one of: ' + ','.join(VALID_ENVIRONMENTS))
 
   shared.Settings.ENVIRONMENT_MAY_BE_WEB = not shared.Settings.ENVIRONMENT or 'web' in environments
@@ -639,30 +639,29 @@ def unmangle_symbols_from_cmdline(symbols):
 def parse_s_args(args):
   settings_changes = []
   for i in range(len(args)):
-    if args[i].startswith('-s'):
-      if is_dash_s_for_emcc(args, i):
-        if args[i] == '-s':
-          key = args[i + 1]
-          args[i + 1] = ''
-        else:
-          key = args[i][2:]
-        args[i] = ''
+    if args[i].startswith('-s') and is_dash_s_for_emcc(args, i):
+      if args[i] == '-s':
+        key = args[i + 1]
+        args[i + 1] = ''
+      else:
+        key = args[i][2:]
+      args[i] = ''
 
-        # If not = is specified default to 1
-        if '=' not in key:
-          key += '=1'
+      # If not = is specified default to 1
+      if '=' not in key:
+        key += '=1'
 
-        # Special handling of browser version targets. A version -1 means that the specific version
-        # is not supported at all. Replace those with INT32_MAX to make it possible to compare e.g.
-        # #if MIN_FIREFOX_VERSION < 68
-        if re.match(r'MIN_.*_VERSION(=.*)?', key):
-          try:
-            if int(key.split('=')[1]) < 0:
-              key = key.split('=')[0] + '=0x7FFFFFFF'
-          except Exception:
-            pass
+      # Special handling of browser version targets. A version -1 means that the specific version
+      # is not supported at all. Replace those with INT32_MAX to make it possible to compare e.g.
+      # #if MIN_FIREFOX_VERSION < 68
+      if re.match(r'MIN_.*_VERSION(=.*)?', key):
+        try:
+          if int(key.split('=')[1]) < 0:
+            key = key.split('=')[0] + '=0x7FFFFFFF'
+        except Exception:
+          pass
 
-        settings_changes.append(key)
+      settings_changes.append(key)
 
   newargs = [a for a in args if a]
   return (settings_changes, newargs)
@@ -1304,12 +1303,11 @@ There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR P
       # linkings can interfere with each other
       if final_suffix not in EXECUTABLE_ENDINGS or options.ignore_dynamic_linking:
         def check(input_file):
-          if get_file_suffix(input_file) in DYNAMICLIB_ENDINGS:
-            if not options.ignore_dynamic_linking:
-              diagnostics.warning('emcc', 'ignoring dynamic library %s because not compiling to JS or HTML, remember to link it when compiling to JS or HTML at the end', os.path.basename(input_file))
-            return False
-          else:
+          if get_file_suffix(input_file) not in DYNAMICLIB_ENDINGS:
             return True
+          if not options.ignore_dynamic_linking:
+            diagnostics.warning('emcc', 'ignoring dynamic library %s because not compiling to JS or HTML, remember to link it when compiling to JS or HTML at the end', os.path.basename(input_file))
+          return False
         return [f for f in inputs if check(f[1])]
       return inputs
 
@@ -2169,16 +2167,12 @@ There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR P
         return 0
 
     def get_object_filename(input_file):
-      if compile_only:
-        # In compile-only mode we don't use any temp file.  The object files
-        # are written directly to their final output locations.
-        if specified_target:
-          assert len(input_files) == 1
-          return specified_target
-        else:
-          return unsuffixed_basename(input_file) + options.default_object_extension
-      else:
+      if not compile_only:
         return in_temp(unsuffixed(uniquename(input_file)) + options.default_object_extension)
+      if not specified_target:
+        return unsuffixed_basename(input_file) + options.default_object_extension
+      assert len(input_files) == 1
+      return specified_target
 
     def compile_source_file(i, input_file):
       logger.debug('compiling source file: ' + input_file)
@@ -3398,7 +3392,7 @@ def parse_value(text, expect_list):
   # places here.
   def parse_string_value(text):
     first = text[0]
-    if first == "'" or first == '"':
+    if first in ["'", '"']:
       text = text.rstrip()
       assert text[-1] == text[0] and len(text) > 1, 'unclosed opened quoted string. expected final character to be "%s" and length to be greater than 1 in "%s"' % (text[0], text)
       return text[1:-1]
@@ -3414,7 +3408,7 @@ def parse_value(text, expect_list):
       if not len(current):
         exit_with_error('string array should not contain an empty value')
       first = current[0]
-      if not(first == "'" or first == '"'):
+      if not first in ["'", '"']:
         result.append(current.rstrip())
       else:
         start = index
@@ -3466,10 +3460,9 @@ def validate_arg_level(level_string, max_level, err_msg, clamp=False):
     level = int(level_string)
   except ValueError:
     raise Exception(err_msg)
-  if clamp:
-    if level > max_level:
-      logger.warning("optimization level '-O" + level_string + "' is not supported; using '-O" + str(max_level) + "' instead")
-      level = max_level
+  if clamp and level > max_level:
+    logger.warning("optimization level '-O" + level_string + "' is not supported; using '-O" + str(max_level) + "' instead")
+    level = max_level
   if not 0 <= level <= max_level:
     raise Exception(err_msg)
   return level

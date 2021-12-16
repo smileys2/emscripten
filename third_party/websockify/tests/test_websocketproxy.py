@@ -37,13 +37,10 @@ except ImportError:
 
 class FakeSocket(object):
     def __init__(self, data=''):
-        if isinstance(data, bytes):
-            self._data = data
-        else:
-            self._data = data.encode('latin_1')
+        self._data = data if isinstance(data, bytes) else data.encode('latin_1')
 
     def recv(self, amt, flags=None):
-        res = self._data[0:amt]
+        res = self._data[:amt]
         if not (flags & socket.MSG_PEEK):
             self._data = self._data[amt:]
 

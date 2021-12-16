@@ -14,10 +14,10 @@ import time
 
 def run():
   subprocess.check_call(['emcc', 'src.cpp', '-O2'])
-  ret = {}
-  for relevant_file in os.listdir('.'):
-    ret[relevant_file] = open(relevant_file).read()
-  return ret
+  return {
+      relevant_file: open(relevant_file).read()
+      for relevant_file in os.listdir('.')
+  }
 
 
 def write(data, subdir):

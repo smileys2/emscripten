@@ -110,8 +110,7 @@ def make_calculator():
     # ------- Input function 
     
     def input(text):
-        result = parser.parse(text,lexer=lexer)
-        return result
+        return parser.parse(text,lexer=lexer)
 
     return input
 

@@ -49,7 +49,7 @@ def  usage():
     print "  --backup : same as -b"
 
 
-def  main( argv ):
+def main( argv ):
     """main program loop"""
 
     global output_dir
@@ -94,12 +94,11 @@ def  main( argv ):
         ok       = None
 
         try:
-            file = open( new_name, "wt" )
-            for block in source_processor.blocks:
-                for line in block.lines:
-                    file.write( line )
-                    file.write( "\n" )
-            file.close()
+            with open( new_name, "wt" ) as file:
+                for block in source_processor.blocks:
+                    for line in block.lines:
+                        file.write( line )
+                        file.write( "\n" )
         except:
             ok = 0
 

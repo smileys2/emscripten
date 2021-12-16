@@ -97,10 +97,10 @@ def with_both_exception_handling(f):
       self.emcc_args.append('-fwasm-exceptions')
       self.v8_args.append('--experimental-wasm-eh')
       self.js_engines = [config.V8_ENGINE]
-      f(self)
     else:
       self.set_setting('DISABLE_EXCEPTION_CATCHING', 0)
-      f(self)
+
+    f(self)
 
   metafunc._parameterize = {'': (False,),
                             'wasm_eh': (True,)}
@@ -152,24 +152,23 @@ def also_with_standalone_wasm(wasm2c=False, impure=False):
     def metafunc(self, standalone):
       if not standalone:
         func(self)
-      else:
-        if can_do_standalone(self):
-          self.set_setting('STANDALONE_WASM')
-          # we will not legalize the JS ffi interface, so we must use BigInt
-          # support in order for JS to have a chance to run this without trapping
-          # when it sees an i64 on the ffi.
-          self.set_setting('WASM_BIGINT')
-          # if we are impure, disallow all wasm engines
-          if impure:
-            self.wasm_engines = []
-          self.js_engines = [config.NODE_JS]
-          self.node_args.append('--experimental-wasm-bigint')
+      elif can_do_standalone(self):
+        self.set_setting('STANDALONE_WASM')
+        # we will not legalize the JS ffi interface, so we must use BigInt
+        # support in order for JS to have a chance to run this without trapping
+        # when it sees an i64 on the ffi.
+        self.set_setting('WASM_BIGINT')
+        # if we are impure, disallow all wasm engines
+        if impure:
+          self.wasm_engines = []
+        self.js_engines = [config.NODE_JS]
+        self.node_args.append('--experimental-wasm-bigint')
+        func(self)
+        if wasm2c:
+          print('wasm2c')
+          self.set_setting('WASM2C')
+          self.wasm_engines = []
           func(self)
-          if wasm2c:
-            print('wasm2c')
-            self.set_setting('WASM2C')
-            self.wasm_engines = []
-            func(self)
 
     metafunc._parameterize = {'': (False,),
                               'standalone': (True,)}
@@ -500,34 +499,6 @@ class TestCoreBase(RunnerCore):
     self.do_run(src, '*12 : 1 : 12\n328157500735811.0,23,416012775903557.0,99\n')
 
     return # TODO: continue to the next part here
-
-    # Test for undefined behavior in C. This is not legitimate code, but does exist
-
-    src = r'''
-      #include <stdio.h>
-
-      int main()
-      {
-        int x[10];
-        char *p = (char*)&x[0];
-        p++;
-        short *q = (short*)p;
-        *q = 300;
-        printf("*%d:%d*\n", *q, ((int)q)%2);
-        int *r = (int*)p;
-        *r = 515559;
-        printf("*%d*\n", *r);
-        long long *t = (long long*)p;
-        *t = 42949672960;
-        printf("*%lld*\n", *t);
-        return 0;
-      }
-    '''
-
-    try:
-      self.do_run(src, '*300:1*\n*515559*\n*42949672960*\n')
-    except Exception as e:
-      assert 'must be aligned' in str(e), e # expected to fail without emulation
 
   def test_align64(self):
     src = r'''
@@ -1110,7 +1081,7 @@ int main() {
       self.do_run_from_file(test_file('core', 'test_exceptions.cpp'), test_file('core', 'test_exceptions_caught.out'))
 
   def test_exceptions_off(self):
-    for support_longjmp in [0, 1]:
+    for _ in [0, 1]:
       self.set_setting('DISABLE_EXCEPTION_CATCHING')
       self.do_run_from_file(test_file('core', 'test_exceptions.cpp'), test_file('core', 'test_exceptions_uncaught.out'), assert_returncode=NON_ZERO)
 
@@ -1127,11 +1098,7 @@ int main() {
       self.do_run_from_file(test_file('core', 'test_exceptions.cpp'), test_file('core', 'test_exceptions_caught.out'))
 
       self.set_setting('DISABLE_EXCEPTION_CATCHING')
-      # TODO: Node currently returns 0 for unhandled promise rejections.
-      # Switch this to True when they change their default
-      expect_fail = False
-      if not self.is_wasm():
-        expect_fail = True
+      expect_fail = not self.is_wasm()
       self.do_run_from_file(test_file('core', 'test_exceptions.cpp'), test_file('core', 'test_exceptions_uncaught.out'), assert_returncode=NON_ZERO if expect_fail else 0)
 
   @with_both_exception_handling
@@ -1969,10 +1936,7 @@ int main(int argc, char **argv) {
       self.skipTest('test needs to modify memory growth')
     self.set_setting('MINIMAL_RUNTIME')
     src = test_file('core', 'test_memorygrowth.c')
-    # Fail without memory growth
-    expect_fail = False
-    if not self.is_wasm():
-      expect_fail = True
+    expect_fail = not self.is_wasm()
     self.do_runf(src, 'OOM', assert_returncode=NON_ZERO if expect_fail else 0)
     # Win with it
     self.set_setting('ALLOW_MEMORY_GROWTH')
@@ -4361,10 +4325,7 @@ res64 - external 64\n''', header='''
         printf("only_in_third_1: %d, %d, %d, %d\n", sidef(), sideg, second_to_third, x);
       }
     ''')
-    if self.is_wasm():
-      libname = 'third.wasm'
-    else:
-      libname = 'third.js'
+    libname = 'third.wasm' if self.is_wasm() else 'third.js'
     self.run_process([EMCC, 'third.cpp', '-o', libname, '-s', 'SIDE_MODULE'] + self.get_emcc_args())
     self.dylink_test(main=r'''
       #include <stdio.h>
@@ -5153,7 +5114,7 @@ main( int argv, char ** argc ) {
     self.set_setting('EXTRA_EXPORTED_RUNTIME_METHODS', ['UTF8ToString', 'stringToUTF8'])
     for decoder_mode in [[], ['-s', 'TEXTDECODER']]:
       self.emcc_args += decoder_mode
-      print(str(decoder_mode))
+      print(decoder_mode)
       self.do_runf(test_file('utf8_invalid.cpp'), 'OK.')
 
   # Test that invalid character in UTF8 does not cause decoding to crash.
@@ -5163,7 +5124,7 @@ main( int argv, char ** argc ) {
     self.set_setting('MINIMAL_RUNTIME')
     for decoder_mode in [False, True]:
       self.set_setting('TEXTDECODER', decoder_mode)
-      print(str(decoder_mode))
+      print(decoder_mode)
       self.do_runf(test_file('utf8_invalid.cpp'), 'OK.')
 
   def test_utf16_textdecoder(self):
@@ -5815,7 +5776,10 @@ return malloc(size);
         s += '.'
       assert len(s) == 9000
       create_file('data.dat', s)
-      self.do_runf(test_file('mmap_file.c'), '*\n' + s[0:20] + '\n' + s[4096:4096 + 20] + '\n*\n')
+      self.do_runf(
+          test_file('mmap_file.c'),
+          '*\n' + s[:20] + '\n' + s[4096:4096 + 20] + '\n*\n',
+      )
 
   def test_cubescript(self):
     # uses register keyword
@@ -6524,12 +6488,9 @@ return malloc(size);
 
     js_funcs = []
     num_exports = 5000
-    count = 0
-    while count < num_exports:
-        src += 'int exported_func_from_response_file_%d () { return %d;}\n' % (count, count)
-        js_funcs.append('_exported_func_from_response_file_%d' % count)
-        count += 1
-
+    for count in range(num_exports):
+      src += 'int exported_func_from_response_file_%d () { return %d;}\n' % (count, count)
+      js_funcs.append('_exported_func_from_response_file_%d' % count)
     src += r'''
       }
 
@@ -6651,11 +6612,14 @@ return malloc(size);
     if config.SPIDERMONKEY_ENGINE and os.path.exists(config.SPIDERMONKEY_ENGINE[0]):
       output = self.run_js('test_demangle_stacks.js', engine=config.SPIDERMONKEY_ENGINE, assert_returncode=NON_ZERO)
       # we may see the full one, if -g, or the short one if not
-      if ' ' + short_aborter + ' ' not in output and ' ' + full_aborter + ' ' not in output:
-        # stack traces may also be ' name ' or 'name@' etc
-        if '\n' + short_aborter + ' ' not in output and '\n' + full_aborter + ' ' not in output and 'wasm-function[' + short_aborter + ']' not in output:
-          if '\n' + short_aborter + '@' not in output and '\n' + full_aborter + '@' not in output:
-            self.assertContained(' ' + short_aborter + ' ' + '\n' + ' ' + full_aborter + ' ', output)
+      if (' ' + short_aborter + ' ' not in output
+          and ' ' + full_aborter + ' ' not in output
+          and '\n' + short_aborter + ' ' not in output
+          and '\n' + full_aborter + ' ' not in output
+          and 'wasm-function[' + short_aborter + ']' not in output
+          and '\n' + short_aborter + '@' not in output
+          and '\n' + full_aborter + '@' not in output):
+        self.assertContained(' ' + short_aborter + ' ' + '\n' + ' ' + full_aborter + ' ', output)
 
   @no_safe_heap('tracing from sbrk into JS leads to an infinite loop')
   def test_tracing(self):
@@ -7247,7 +7211,7 @@ someweirdtext
     def get_wat_addr(call_index):
       # find the call_index-th call
       call_loc = -1
-      for i in range(call_index + 1):
+      for _ in range(call_index + 1):
         call_loc = wat.find('call $out_to_js', call_loc + 1)
         assert call_loc > 0
       # the call begins with the local.get/i32.const printed below it, which is

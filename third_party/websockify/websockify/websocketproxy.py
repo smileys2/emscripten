@@ -152,11 +152,7 @@ Traffic Legend:
                 ins, outs, excepts = select.select(rlist, wlist, [], 1)
             except (select.error, OSError):
                 exc = sys.exc_info()[1]
-                if hasattr(exc, 'errno'):
-                    err = exc.errno
-                else:
-                    err = exc[0]
-
+                err = exc.errno if hasattr(exc, 'errno') else exc[0]
                 if err != errno.EINTR:
                     raise
                 else:
@@ -309,7 +305,7 @@ class WebSocketProxy(websocket.WebSocketServer):
                 self.vmsg("Wrapped command exited (or daemon). Returned %s" % ret)
                 self.cmd = None
 
-        if self.wrap_cmd and self.cmd == None:
+        if self.wrap_cmd and self.cmd is None:
             # Response to wrapped command being gone
             if self.wrap_mode == "ignore":
                 pass
@@ -448,7 +444,7 @@ def websockify_init():
     del opts.target_cfg
 
     # Sanity checks
-    if len(args) < 2 and not (opts.token_plugin or opts.unix_target):
+    if len(args) < 2 and not opts.token_plugin and not opts.unix_target:
         parser.error("Too few arguments")
     if sys.argv.count('--'):
         opts.wrap_cmd = args[1:]

@@ -91,7 +91,7 @@ def parse_parens(s):
   while i < end:
     ch = s[i]
     if ch == '/':
-      if i < end and s[i + 1] == '/':
+      if s[i + 1] == '/':
         # prev = i
         i = s.find('\n', i)
         # print(idx_to_line_col(s, prev) + ' starts // comment, skipping to ' + idx_to_line_col(s, i))
@@ -122,23 +122,14 @@ def parse_parens(s):
         braces.append(i)
       # print(idx_to_line_col(s, i) + ' has {')
     elif ch == ')':
-      if rcount(s, '\\', i - 1) % 2 == 0:
-        # print(idx_to_line_col(s, i) + ' has )')
-        if len(parens) > 0:
-          brace_map[parens.pop()] = i
-        # else: print('Warning: ' + idx_to_line_col(s, i) + ' has ), but could not find the opening parenthesis.')
+      if rcount(s, '\\', i - 1) % 2 == 0 and parens:
+        brace_map[parens.pop()] = i
     elif ch == ']':
-      if rcount(s, '\\', i - 1) % 2 == 0:
-        # print(idx_to_line_col(s, i) + ' has ]')
-        if len(brackets) > 0:
-          brace_map[brackets.pop()] = i
-        # else: print('Warning: ' + idx_to_line_col(s, i) + ' has ], but could not find the opening bracket.')
+      if rcount(s, '\\', i - 1) % 2 == 0 and brackets:
+        brace_map[brackets.pop()] = i
     elif ch == '}':
-      if rcount(s, '\\', i - 1) % 2 == 0:
-        # print(idx_to_line_col(s, i) + ' has }')
-        if len(braces) > 0:
-          brace_map[braces.pop()] = i
-        # else: print('Warning: ' + idx_to_line_col(s, i) + ' has }, but could not find the opening brace.')
+      if rcount(s, '\\', i - 1) % 2 == 0 and braces:
+        brace_map[braces.pop()] = i
     i += 1
   return brace_map
 
@@ -267,9 +258,7 @@ def analyze_javascript_file_contents(filename, file_contents, total_source_set_s
         print('===')
     prev_end_pos = next_pos
 
-    # Verify that this position actually starts a function by testing against a regex (this is much slower than substring search,
-    # which is why it's done as a second step, instead of as primary way to search)
-    if next_pos == func_pos:
+    if prev_end_pos == func_pos:
       func_match = func_regex.match(file_contents[func_pos:])
       if not func_match:
         continue
@@ -643,10 +632,7 @@ def guess_symbol_map_file_location(sources, symbol_map_file):
 
 # Returns total byte size of the given list of source files
 def count_file_set_size(sources):
-  total_size = 0
-  for s in sources:
-    total_size += os.path.getsize(s)
-  return total_size
+  return sum(os.path.getsize(s) for s in sources)
 
 
 # Merges two given data sets into one large data set with diffing information
@@ -900,11 +886,8 @@ def main():
     print('set 2 is %d bytes, which is %+.2f%% %s than set 1 size (%d bytes)' % (set2_size, (set2_size - set1_size) * 100.0 / set2_size, 'more' if set2_size > set1_size else 'less', set1_size))
     uniq_compare(data1, data2)
     common_compare(data1, data2)
-  else:
-    if not options.only_summarize:
-      print_symbol_info(data1, set1_size)
-    # TODO: print some kind of summary?
-
+  elif not options.only_summarize:
+    print_symbol_info(data1, set1_size)
   return 0
 
 

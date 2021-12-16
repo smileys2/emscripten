@@ -38,44 +38,36 @@ class BasicHTTPAuth(object):
     def authenticate(self, headers, target_host, target_port):
         import base64
         auth_header = headers.get('Authorization')
-        if auth_header:
-            if not auth_header.startswith('Basic '):
-                raise AuthenticationError(response_code=403)
-
-            try:
-                user_pass_raw = base64.b64decode(auth_header[6:])
-            except TypeError:
-                raise AuthenticationError(response_code=403)
-
-            try:
-                # http://stackoverflow.com/questions/7242316/what-encoding-should-i-use-for-http-basic-authentication
-                user_pass_as_text = user_pass_raw.decode('ISO-8859-1')
-            except UnicodeDecodeError:
-                raise AuthenticationError(response_code=403)
-
-            user_pass = user_pass_as_text.split(':', 1)
-            if len(user_pass) != 2:
-                raise AuthenticationError(response_code=403)
-
-            if not self.validate_creds(*user_pass):
-                raise AuthenticationError(response_code=403)
-
-        else:
+        if not auth_header:
             raise AuthenticationError(response_code=401,
                                       response_headers={'WWW-Authenticate': 'Basic realm="Websockify"'})
+        if not auth_header.startswith('Basic '):
+            raise AuthenticationError(response_code=403)
+
+        try:
+            user_pass_raw = base64.b64decode(auth_header[6:])
+        except TypeError:
+            raise AuthenticationError(response_code=403)
+
+        try:
+            # http://stackoverflow.com/questions/7242316/what-encoding-should-i-use-for-http-basic-authentication
+            user_pass_as_text = user_pass_raw.decode('ISO-8859-1')
+        except UnicodeDecodeError:
+            raise AuthenticationError(response_code=403)
+
+        user_pass = user_pass_as_text.split(':', 1)
+        if len(user_pass) != 2:
+            raise AuthenticationError(response_code=403)
+
+        if not self.validate_creds(*user_pass):
+            raise AuthenticationError(response_code=403)
 
     def validate_creds(self, username, password):
-        if '%s:%s' % (username, password) == self.src:
-            return True
-        else:
-            return False
+        return '%s:%s' % (username, password) == self.src
 
 class ExpectOrigin(object):
     def __init__(self, src=None):
-        if src is None:
-            self.source = []
-        else:
-            self.source = src.split()
+        self.source = [] if src is None else src.split()
 
     def authenticate(self, headers, target_host, target_port):
         origin = headers.get('Origin', None)

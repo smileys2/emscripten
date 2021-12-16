@@ -124,10 +124,7 @@ def p_optend(p):
     '''optend : COMMA 
               | SEMI
               |'''
-    if len(p)  == 2:
-         p[0] = p[1]
-    else:
-         p[0] = None
+    p[0] = p[1] if len(p)  == 2 else None
 
 #### PRINT statement with no arguments
 
@@ -182,10 +179,7 @@ def p_command_for_bad_step(p):
 def p_optstep(p):
     '''optstep : STEP expr
                | empty'''
-    if len(p) == 3:
-       p[0] = p[2]
-    else:
-       p[0] = None
+    p[0] = p[2] if len(p) == 3 else None
 
 #### NEXT statement
     

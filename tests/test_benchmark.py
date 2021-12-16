@@ -33,12 +33,8 @@ DEFAULT_ARG = '4'
 
 TEST_REPS = 5
 
-# by default, run just core benchmarks
-CORE_BENCHMARKS = True
 # if a specific benchmark is requested, don't limit to core
-if 'benchmark.' in str(sys.argv):
-  CORE_BENCHMARKS = False
-
+CORE_BENCHMARKS = 'benchmark.' not in str(sys.argv)
 non_core = unittest.skipIf(CORE_BENCHMARKS, "only running core benchmarks")
 
 IGNORE_COMPILATION = 0
@@ -78,7 +74,7 @@ class Benchmarker():
         try:
           curr = output_parser(output)
         except Exception as e:
-          print(str(e))
+          print(e)
           print('Parsing benchmark results failed, output was: ' + output)
       self.times.append(curr)
 
@@ -301,7 +297,7 @@ class CheerpBenchmarker(Benchmarker):
     if lib_builder:
       # build as "native" (so no emcc env stuff), but with all the cheerp stuff
       # set in the env
-      cheerp_args = cheerp_args + lib_builder(self.name, native=True, env_init={
+      cheerp_args += lib_builder(self.name, native=True, env_init={
         'CC': CHEERP_BIN + 'clang',
         'CXX': CHEERP_BIN + 'clang++',
         'AR': CHEERP_BIN + '../libexec/cheerp-unknown-none-ar',
