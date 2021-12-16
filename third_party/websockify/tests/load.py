@@ -155,10 +155,7 @@ if __name__ == '__main__':
 
         if len(args) not in [1,2]: raise
         opts.listen_port = int(args[0])
-        if len(args) == 2:
-            opts.delay = int(args[1])
-        else:
-            opts.delay = 10
+        opts.delay = int(args[1]) if len(args) == 2 else 10
     except:
         parser.error("Invalid arguments")
 

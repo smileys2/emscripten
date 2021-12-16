@@ -355,10 +355,7 @@ def is_browser_process_alive():
   if current_browser_processes:
     try:
       import psutil
-      for p in current_browser_processes:
-        if psutil.pid_exists(p['pid']):
-          return True
-      return False
+      return any(psutil.pid_exists(p['pid']) for p in current_browser_processes)
     except Exception:
       # Fail gracefully if psutil not available
       logv('psutil is not available, emrun may not be able to accurately track whether the browser process is alive or not')
@@ -440,10 +437,7 @@ def detect_browser_processes():
   running_browser_processes = list_processes_by_name(browser_exe)
 
   def pid_existed(pid):
-    for proc in previous_browser_processes:
-      if proc['pid'] == pid:
-        return True
-    return False
+    return any(proc['pid'] == pid for proc in previous_browser_processes)
 
   for p in running_browser_processes:
     logv('Detected running browser process id: ' + str(p['pid']) + ', existed already at emrun startup? ' + str(pid_existed(p['pid'])))
@@ -951,7 +945,7 @@ def get_executable_version(filename):
       version = win32api.HIWORD(ms), win32api.LOWORD(ms), win32api.HIWORD(ls), win32api.LOWORD(ls)
       return '.'.join(map(str, version))
     elif MACOS:
-      plistfile = filename[0:filename.find('MacOS')] + 'Info.plist'
+      plistfile = filename[:filename.find('MacOS')] + 'Info.plist'
       info = plistlib.readPlist(plistfile)
       # Data in Info.plists is a bit odd, this check combo gives best information on each browser.
       if 'firefox' in filename.lower():
@@ -975,7 +969,7 @@ def get_executable_version(filename):
 def get_browser_build_date(filename):
   try:
     if MACOS:
-      plistfile = filename[0:filename.find('MacOS')] + 'Info.plist'
+      plistfile = filename[:filename.find('MacOS')] + 'Info.plist'
       info = plistlib.readPlist(plistfile)
       # Data in Info.plists is a bit odd, this check combo gives best information on each browser.
       if 'firefox' in filename.lower():
@@ -1116,9 +1110,8 @@ def get_system_memory():
       if emrun_options.android:
         lines = check_output([ADB, 'shell', 'cat', '/proc/meminfo']).split('\n')
       else:
-        mem = open('/proc/meminfo', 'r')
-        lines = mem.readlines()
-        mem.close()
+        with open('/proc/meminfo', 'r') as mem:
+          lines = mem.readlines()
       for i in lines:
         sline = i.split()
         if str(sline[0]) == 'MemTotal:':
@@ -1243,9 +1236,9 @@ def find_browser(name):
                          ('chrome', which('google-chrome'))]
 
   for alias, browser_exe in browser_locations:
-    if name == alias:
-      if browser_exe is not None and os.path.isfile(browser_exe):
-        return [browser_exe]
+    if (name == alias and browser_exe is not None
+        and os.path.isfile(browser_exe)):
+      return [browser_exe]
 
   return None # Could not find the browser
 
@@ -1378,11 +1371,9 @@ def get_system_info(format_json):
                          'ram': get_system_memory(),
                          'cpu': get_android_cpu_infoline()
                          }, indent=2)
-    else:
-      info = 'Model: ' + get_android_model() + '\n'
-      info += 'OS: ' + get_android_os_version() + ' with ' + str(get_system_memory() // 1024 // 1024) + ' MB of System RAM\n'
-      info += 'CPU: ' + get_android_cpu_infoline() + '\n'
-      return info.strip()
+    info = 'Model: ' + get_android_model() + '\n'
+    info += 'OS: ' + get_android_os_version() + ' with ' + str(get_system_memory() // 1024 // 1024) + ' MB of System RAM\n'
+    info += 'CPU: ' + get_android_cpu_infoline() + '\n'
   else:
     try:
       unique_system_id = open(os.path.expanduser('~/.emrun.generated.guid'), 'r').read().strip()
@@ -1402,20 +1393,19 @@ def get_system_info(format_json):
                          'cpu': get_cpu_info(),
                          'gpu': get_gpu_info(),
                          'uuid': unique_system_id}, indent=2)
-    else:
-      cpu = get_cpu_info()
-      gpus = get_gpu_info()
-      info = 'Computer name: ' + socket.gethostname() + '\n' # http://stackoverflow.com/questions/799767/getting-name-of-windows-computer-running-python-script
-      info += 'Model: ' + get_computer_model() + '\n'
-      info += 'OS: ' + get_os_version() + ' with ' + str(get_system_memory() // 1024 // 1024) + ' MB of System RAM\n'
-      info += 'CPU: ' + cpu['model'] + ', ' + str(cpu['frequency']) + ' MHz, ' + str(cpu['physicalCores']) + ' physical cores, ' + str(cpu['logicalCores']) + ' logical cores\n'
-      if len(gpus) == 1:
-        info += 'GPU: ' + gpus[0]['model'] + ' with ' + str(gpus[0]['ram'] // 1024 // 1024) + " MB of VRAM\n"
-      elif len(gpus) > 1:
-        for i in range(0, len(gpus)):
-          info += 'GPU' + str(i) + ": " + gpus[i]['model'] + ' with ' + str(gpus[i]['ram'] // 1024 // 1024) + ' MBs of VRAM\n'
-      info += 'UUID: ' + unique_system_id
-      return info.strip()
+    cpu = get_cpu_info()
+    gpus = get_gpu_info()
+    info = 'Computer name: ' + socket.gethostname() + '\n' # http://stackoverflow.com/questions/799767/getting-name-of-windows-computer-running-python-script
+    info += 'Model: ' + get_computer_model() + '\n'
+    info += 'OS: ' + get_os_version() + ' with ' + str(get_system_memory() // 1024 // 1024) + ' MB of System RAM\n'
+    info += 'CPU: ' + cpu['model'] + ', ' + str(cpu['frequency']) + ' MHz, ' + str(cpu['physicalCores']) + ' physical cores, ' + str(cpu['logicalCores']) + ' logical cores\n'
+    if len(gpus) == 1:
+      info += 'GPU: ' + gpus[0]['model'] + ' with ' + str(gpus[0]['ram'] // 1024 // 1024) + " MB of VRAM\n"
+    elif len(gpus) > 1:
+      for i in range(len(gpus)):
+        info += 'GPU' + str(i) + ": " + gpus[i]['model'] + ' with ' + str(gpus[i]['ram'] // 1024 // 1024) + ' MBs of VRAM\n'
+    info += 'UUID: ' + unique_system_id
+  return info.strip()
 
 
 # Be resilient to quotes and whitespace
@@ -1441,8 +1431,6 @@ def list_processes_by_name(exe_full_path):
   except Exception:
     # Fail gracefully if psutil not available
     logv('import psutil failed, unable to detect browser processes')
-    pass
-
   logv('Searching for processes by full path name "' + exe_full_path + '".. found ' + str(len(pids)) + ' entries')
 
   return pids

@@ -114,9 +114,7 @@ def ConvertFilesToRst():
         title += ' (wiki-import)'
         length = len(title)
         # print length
-        headerbar = ''
-        for number in range(length):
-            headerbar += '='
+        headerbar = ''.join('=' for _ in range(length))
         page_reference = filenamestripped
         page_reference_link_text = '.. _%s:\n\n' % page_reference
         titlebar = page_reference_link_text + headerbar + '\n' + title + '\n' + headerbar + '\n'

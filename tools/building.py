@@ -216,13 +216,13 @@ def llvm_nm_multiple(files):
     a_files = [f for f in llvm_nm_files if f not in o_files]
 
     # Issue parallel calls for .a files
-    if len(a_files) > 0:
+    if a_files:
       results = shared.run_multiple_processes([[LLVM_NM, a] for a in a_files], pipe_stdout=True, check=False)
       for i in range(len(results)):
         nm_cache[a_files[i]] = parse_symbols(results[i])
 
     # Issue a single batch call for multiple .o files
-    if len(o_files) > 0:
+    if o_files:
       cmd = [LLVM_NM] + o_files
       cmd = get_command_with_possible_response_file(cmd)
       results = run_process(cmd, stdout=PIPE, stderr=PIPE, check=False)
@@ -415,11 +415,10 @@ def lld_flags_for_executable(external_symbol_list):
       # when Settings.EXPECT_MAIN is set we fall back to wasm-ld default of _start
       if not Settings.EXPECT_MAIN:
         cmd += ['--entry=_initialize']
+    elif Settings.EXPECT_MAIN and not Settings.IGNORE_MISSING_MAIN:
+      cmd += ['--entry=main']
     else:
-      if Settings.EXPECT_MAIN and not Settings.IGNORE_MISSING_MAIN:
-        cmd += ['--entry=main']
-      else:
-        cmd += ['--no-entry']
+      cmd += ['--no-entry']
     if not Settings.ALLOW_MEMORY_GROWTH:
       cmd.append('--max-memory=%d' % Settings.INITIAL_MEMORY)
     elif Settings.MAXIMUM_MEMORY != -1:
@@ -612,8 +611,7 @@ def get_command_with_possible_response_file(cmd):
 
   logger.debug('using response file for %s' % cmd[0])
   filename = response_file.create_response_file(cmd[1:], TEMP_DIR)
-  new_cmd = [cmd[0], "@" + filename]
-  return new_cmd
+  return [cmd[0], "@" + filename]
 
 
 def parse_symbols(output):
@@ -708,8 +706,7 @@ def acorn_optimizer(filename, passes, extra_info=None, return_output=False):
     check_call(cmd, stdout=open(next, 'w'))
     save_intermediate(next, '%s.js' % passes[0])
     return next
-  output = check_call(cmd, stdout=PIPE).stdout
-  return output
+  return check_call(cmd, stdout=PIPE).stdout
 
 
 # evals ctors. if binaryen_bin is provided, it is the dir of the binaryen tool
@@ -938,20 +935,17 @@ def minify_wasm_js(js_file, wasm_file, expensive_optimizations, minify_whitespac
     js_file = acorn_optimizer(js_file, passes)
   # if we can optimize this js+wasm combination under the assumption no one else
   # will see the internals, do so
-  if not Settings.LINKABLE:
-    # if we are optimizing for size, shrink the combined wasm+JS
-    # TODO: support this when a symbol map is used
-    if expensive_optimizations:
-      js_file = metadce(js_file, wasm_file, minify_whitespace=minify_whitespace, debug_info=debug_info)
-      # now that we removed unneeded communication between js and wasm, we can clean up
-      # the js some more.
-      passes = ['AJSDCE']
-      if minify_whitespace:
-        passes.append('minifyWhitespace')
-      logger.debug('running post-meta-DCE cleanup on shell code: ' + ' '.join(passes))
-      js_file = acorn_optimizer(js_file, passes)
-      if Settings.MINIFY_WASM_IMPORTS_AND_EXPORTS:
-        js_file = minify_wasm_imports_and_exports(js_file, wasm_file, minify_whitespace=minify_whitespace, minify_exports=Settings.MINIFY_ASMJS_EXPORT_NAMES, debug_info=debug_info)
+  if not Settings.LINKABLE and expensive_optimizations:
+    js_file = metadce(js_file, wasm_file, minify_whitespace=minify_whitespace, debug_info=debug_info)
+    # now that we removed unneeded communication between js and wasm, we can clean up
+    # the js some more.
+    passes = ['AJSDCE']
+    if minify_whitespace:
+      passes.append('minifyWhitespace')
+    logger.debug('running post-meta-DCE cleanup on shell code: ' + ' '.join(passes))
+    js_file = acorn_optimizer(js_file, passes)
+    if Settings.MINIFY_WASM_IMPORTS_AND_EXPORTS:
+      js_file = minify_wasm_imports_and_exports(js_file, wasm_file, minify_whitespace=minify_whitespace, minify_exports=Settings.MINIFY_ASMJS_EXPORT_NAMES, debug_info=debug_info)
   return js_file
 
 
@@ -965,10 +959,7 @@ def metadce(js_file, wasm_file, minify_whitespace, debug_info):
   graph = json.loads(txt)
   # add exports based on the backend output, that are not present in the JS
   if not Settings.DECLARE_ASM_MODULE_EXPORTS:
-    exports = set()
-    for item in graph:
-      if 'export' in item:
-        exports.add(item['export'])
+    exports = {item['export'] for item in graph if 'export' in item}
     for export, unminified in Settings.MODULE_EXPORTS:
       if export not in exports:
         graph.append({
@@ -1022,14 +1013,13 @@ def metadce(js_file, wasm_file, minify_whitespace, debug_info):
       item['import'][0] = Settings.WASI_MODULE_NAME
   # fixup wasm backend prefixing
   for item in graph:
-    if 'import' in item:
-      if item['import'][1][0] == '_':
-        item['import'][1] = item['import'][1][1:]
+    if 'import' in item and item['import'][1][0] == '_':
+      item['import'][1] = item['import'][1][1:]
   # map import names from wasm to JS, using the actual name the wasm uses for the import
-  import_name_map = {}
-  for item in graph:
-    if 'import' in item:
-      import_name_map[item['name']] = 'emcc$import$' + item['import'][1]
+  import_name_map = {
+      item['name']: 'emcc$import$' + item['import'][1]
+      for item in graph if 'import' in item
+  }
   temp = temp_files.get('.txt').name
   txt = json.dumps(graph)
   with open(temp, 'w') as f:
@@ -1270,12 +1260,7 @@ def handle_final_wasm_symbols(wasm_file, symbols_file, debug_info):
   args = []
   if symbols_file:
     args += ['--print-function-map']
-  if not debug_info:
-    # to remove debug info, we just write to that same file, and without -g
-    args += ['-o', wasm_file]
-  else:
-    # suppress the wasm-opt warning regarding "no output file specified"
-    args += ['--quiet']
+  args += ['-o', wasm_file] if not debug_info else ['--quiet']
   # ignore stderr because if wasm-opt is run without a -o it will warn
   output = run_wasm_opt(wasm_file, args=args, stdout=PIPE)
   if symbols_file:

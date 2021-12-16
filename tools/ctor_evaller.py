@@ -52,7 +52,10 @@ def find_ctors_data(js, num):
   ctors_start, ctors_end = find_ctors(js)
   assert ctors_start > 0
   ctors_text = js[ctors_start:ctors_end]
-  all_ctors = [ctor for ctor in ctors_text.split(' ') if ctor.endswith('()') and not ctor == 'function()' and '.' not in ctor]
+  all_ctors = [
+      ctor for ctor in ctors_text.split(' ')
+      if ctor.endswith('()') and ctor != 'function()' and '.' not in ctor
+  ]
   all_ctors = [ctor.replace('()', '') for ctor in all_ctors]
   assert all(ctor.startswith('_') for ctor in all_ctors)
   all_ctors = [ctor[1:] for ctor in all_ctors]
@@ -83,9 +86,10 @@ def eval_ctors(js, wasm_file, num):
   if len(ctors) == num_successful:
     new_ctors = ''
   else:
-    elements = []
-    for ctor in all_ctors[num_successful:]:
-      elements.append('{ func: function() { %s() } }' % ctor)
+    elements = [
+        '{ func: function() { %s() } }' % ctor
+        for ctor in all_ctors[num_successful:]
+    ]
     new_ctors = '__ATINIT__.push(' + ', '.join(elements) + ');'
   js = js[:ctors_start] + new_ctors + js[ctors_end:]
   return num_successful, js

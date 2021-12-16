@@ -25,7 +25,7 @@ for line in open(sys.argv[1]).readlines():
   if line.startswith('test_'):
     benchmark = line.split(' ')[0][5:]
     # print('benchmark:', benchmark)
-    if len(matrix) == 0:
+    if not matrix:
       # the first line has [(free space), benchmarker name 1, ..]
       matrix += [[' ']]
     # other lines have [benchmark name, result 1, ..]

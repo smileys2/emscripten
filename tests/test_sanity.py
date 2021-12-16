@@ -304,24 +304,23 @@ class sanity(RunnerCore):
                              ('cheez', False)]:
       print(version, succeed)
       try_delete(SANITY_FILE)
-      f = open(self.in_dir('fake', 'nodejs'), 'w')
-      f.write('#!/bin/sh\n')
-      f.write('''if [ $1 = "--version" ]; then
+      with open(self.in_dir('fake', 'nodejs'), 'w') as f:
+        f.write('#!/bin/sh\n')
+        f.write('''if [ $1 = "--version" ]; then
 echo "%s"
 else
 %s $@
 fi
 ''' % (version, ' '.join(config.NODE_JS)))
-      f.close()
       make_executable(self.in_dir('fake', 'nodejs'))
-      if not succeed:
-        if version[0] == 'v':
-          self.check_working(EMCC, NODE_WARNING)
-        else:
-          self.check_working(EMCC, NODE_WARNING_2)
-      else:
+      if succeed:
         output = self.check_working(EMCC)
         self.assertNotContained(NODE_WARNING, output)
+
+      elif version[0] == 'v':
+        self.check_working(EMCC, NODE_WARNING)
+      else:
+        self.check_working(EMCC, NODE_WARNING_2)
 
   def test_emcc(self):
     SANITY_FAIL_MESSAGE = 'sanity check failed to run'

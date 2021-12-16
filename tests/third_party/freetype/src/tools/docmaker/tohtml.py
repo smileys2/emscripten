@@ -197,17 +197,13 @@ def  dump_html_code( lines, prefix = "" ):
 
 class  HtmlFormatter( Formatter ):
 
-    def  __init__( self, processor, project_title, file_prefix ):
+    def __init__( self, processor, project_title, file_prefix ):
         Formatter.__init__( self, processor )
 
         global html_header_1, html_header_2, html_header_3
         global html_header_4, html_header_5, html_footer
 
-        if file_prefix:
-            file_prefix = file_prefix + "-"
-        else:
-            file_prefix = ""
-
+        file_prefix = file_prefix + "-" if file_prefix else ""
         self.headers           = processor.headers
         self.project_title     = project_title
         self.file_prefix       = file_prefix
@@ -331,7 +327,7 @@ class  HtmlFormatter( Formatter ):
         if field.name:
             print "</td></tr></table>"
 
-    def  html_source_quote( self, line, block_name = None ):
+    def html_source_quote( self, line, block_name = None ):
         result = ""
         while line:
             m = re_source_crossref.match( line )
@@ -352,11 +348,11 @@ class  HtmlFormatter( Formatter ):
                     result = result + prefix + '<a href="' + \
                              self.make_block_url( block ) + '">' + name + '</a>'
                 else:
-                    result = result + html_quote( line[:length] )
+                    result += html_quote( line[:length] )
 
                 line = line[length:]
             else:
-                result = result + html_quote( line )
+                result += html_quote( line )
                 line   = []
 
         return result
@@ -435,8 +431,8 @@ class  HtmlFormatter( Formatter ):
 
         self.index_items = {}
 
-    def  index_dump( self, index_filename = None ):
-        if index_filename == None:
+    def index_dump( self, index_filename = None ):
+        if index_filename is None:
             index_filename = self.file_prefix + "index.html"
 
         Formatter.index_dump( self, index_filename )
@@ -478,11 +474,11 @@ class  HtmlFormatter( Formatter ):
 
         print self.html_footer
 
-    def  toc_dump( self, toc_filename = None, index_filename = None ):
-        if toc_filename == None:
+    def toc_dump( self, toc_filename = None, index_filename = None ):
+        if toc_filename is None:
             toc_filename = self.file_prefix + "toc.html"
 
-        if index_filename == None:
+        if index_filename is None:
             index_filename = self.file_prefix + "index.html"
 
         Formatter.toc_dump( self, toc_filename, index_filename )

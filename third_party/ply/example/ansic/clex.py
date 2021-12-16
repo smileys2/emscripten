@@ -119,9 +119,7 @@ t_ELLIPSIS         = r'\.\.\.'
 
 # Identifiers and reserved words
 
-reserved_map = { }
-for r in reserved:
-    reserved_map[r.lower()] = r
+reserved_map = {r.lower(): r for r in reserved}
 
 def t_ID(t):
     r'[A-Za-z_][\w_]*'

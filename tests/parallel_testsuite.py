@@ -61,9 +61,7 @@ class ParallelTestSuite(unittest.BaseTestSuite):
 
     Future work: measure slowness of tests and sort accordingly.
     """
-    tests = []
-    for test in self:
-      tests.append(test)
+    tests = [test for test in self]
     tests.sort(key=str)
     return tests[::-1]
 

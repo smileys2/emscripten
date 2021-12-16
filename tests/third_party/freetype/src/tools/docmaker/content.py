@@ -69,11 +69,8 @@ class  DocCode:
         for l in lines:
             print prefix + l
 
-    def  dump_lines( self, margin = 0, width = 60 ):
-        result = []
-        for l in self.lines:
-            result.append( " " * margin + l )
-        return result
+    def dump_lines( self, margin = 0, width = 60 ):
+        return [" " * margin + l for l in self.lines]
 
 
 
@@ -97,7 +94,7 @@ class  DocPara:
         for l in lines:
             print prefix + l
 
-    def  dump_lines( self, margin = 0, width = 60 ):
+    def dump_lines( self, margin = 0, width = 60 ):
         cur    = ""  # current line
         col    = 0   # current width
         result = []
@@ -105,7 +102,7 @@ class  DocPara:
         for word in self.words:
             ln = len( word )
             if col > 0:
-                ln = ln + 1
+                ln += 1
 
             if col + ln > width:
                 result.append( " " * margin + cur )
@@ -115,7 +112,7 @@ class  DocPara:
                 if col > 0:
                     cur = cur + " "
                 cur = cur + word
-                col = col + ln
+                col += ln
 
         if col > 0:
             result.append( " " * margin + cur )
@@ -132,7 +129,7 @@ class  DocPara:
 #
 class  DocField:
 
-    def  __init__( self, name, lines ):
+    def __init__( self, name, lines ):
         self.name  = name  # can be None for normal paragraphs/sources
         self.items = []    # list of items
 
@@ -176,17 +173,16 @@ class  DocField:
                     # switch to code extraction mode
                     margin = len( m.group( 1 ) )
                     mode   = mode_code
+                elif not string.split( l ) and cur_lines:
+                    # if the line is empty, we end the current paragraph,
+                    # if any
+                    para = DocPara( cur_lines )
+                    self.items.append( para )
+                    cur_lines = []
                 else:
-                    if not string.split( l ) and cur_lines:
-                        # if the line is empty, we end the current paragraph,
-                        # if any
-                        para = DocPara( cur_lines )
-                        self.items.append( para )
-                        cur_lines = []
-                    else:
-                        # otherwise, simply add the line to the current
-                        # paragraph
-                        cur_lines.append( l )
+                    # otherwise, simply add the line to the current
+                    # paragraph
+                    cur_lines.append( l )
 
         if mode == mode_code:
             # unexpected end of code sequence
@@ -435,7 +431,7 @@ class  ContentProcessor:
 
                 doc_block = DocBlock( source, follow, self )
 
-    def  finish( self ):
+    def finish( self ):
         # process all sections to extract their abstract, description
         # and ordered list of items
         #
@@ -458,11 +454,7 @@ class  ContentProcessor:
 
         # check that all sections are in a chapter
         #
-        others = []
-        for sec in self.sections.values():
-            if not sec.chapter:
-                others.append( sec )
-
+        others = [sec for sec in self.sections.values() if not sec.chapter]
         # create a new special chapter for all remaining sections
         # when necessary
         #
@@ -475,7 +467,7 @@ class  ContentProcessor:
 
 class  DocBlock:
 
-    def  __init__( self, source, follow, processor ):
+    def __init__( self, source, follow, processor ):
         processor.reset()
 
         self.source  = source
@@ -535,7 +527,7 @@ class  DocBlock:
         end   = len( source ) - 1
 
         while start < end and not string.strip( source[start] ):
-            start = start + 1
+            start += 1
 
         while start < end and not string.strip( source[end] ):
             end = end - 1

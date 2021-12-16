@@ -23,7 +23,7 @@ api_reference_directory = './docs/api_reference/'
 # if you change here, change everywhere.
 api_item_filename = 'api_items.py'
 
-api_reference_items = dict()
+api_reference_items = {}
 
 
 def parseFiles():
@@ -79,7 +79,7 @@ def exportItems():
         # write function lead in
         infile.write("# Auto-generated file (see get_api_items.py)\n\ndef get_mapped_items():\n    mapped_wiki_inline_code = dict()\n")
 
-        items = list((key, value) for key, value in api_reference_items.items())
+        items = list(api_reference_items.items())
         items.sort()
         for key, value in items:
             # Write out each API item to add

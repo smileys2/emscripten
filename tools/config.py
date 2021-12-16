@@ -246,7 +246,7 @@ if '--em-config' in sys.argv:
       newargs += [arg]
     elif arg == '--em-config':
       skip = True
-    elif skip:
+    else:
       skip = False
   sys.argv = newargs
   if not os.path.isfile(EM_CONFIG):

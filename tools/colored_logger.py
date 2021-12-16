@@ -68,12 +68,12 @@ def add_coloring_to_emit_windows(fn):
     BACKGROUND_CYAN      = 0x0030 # noqa
     BACKGROUND_RED       = 0x0040 # noqa
     BACKGROUND_MAGENTA   = 0x0050 # noqa
-    BACKGROUND_YELLOW    = 0x0060 # noqa
     BACKGROUND_GREY      = 0x0070 # noqa
-    BACKGROUND_INTENSITY = 0x0080 # background color is intensified.
     levelno = args[1].levelno
-    if(levelno >= 50):
-        color = BACKGROUND_YELLOW | FOREGROUND_RED | FOREGROUND_INTENSITY | BACKGROUND_INTENSITY
+    if (levelno >= 50):
+      BACKGROUND_YELLOW    = 0x0060 # noqa
+      BACKGROUND_INTENSITY = 0x0080 # background color is intensified.
+      color = BACKGROUND_YELLOW | FOREGROUND_RED | FOREGROUND_INTENSITY | BACKGROUND_INTENSITY
     elif(levelno >= 40):
         color = FOREGROUND_RED | FOREGROUND_INTENSITY
     elif(levelno >= 30):
@@ -83,7 +83,7 @@ def add_coloring_to_emit_windows(fn):
     elif(levelno >= 10):
         color = FOREGROUND_MAGENTA
     else:
-        color = FOREGROUND_WHITE
+      color = FOREGROUND_WHITE
 
     old_color = _get_color()
     _set_color(color)

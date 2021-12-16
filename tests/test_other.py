@@ -177,8 +177,8 @@ class other(RunnerCore):
     self.assertContained('Running sanity checks', proc.stderr)
 
   def test_emcc_generate_config(self):
+    config_path = './emscripten_config'
     for compiler in [EMCC, EMXX]:
-      config_path = './emscripten_config'
       self.run_process([compiler, '--generate-config', config_path])
       self.assertExists(config_path, 'A config file should have been created at %s' % config_path)
       config_contents = open(config_path).read()
@@ -532,7 +532,7 @@ f.close()
     with open(test_file('other', 'test_emsize.out')) as expected_output:
       expected = expected_output.read()
     cmd = [emsize, test_file('other', 'test_emsize.js')]
-    for command in [cmd, cmd + ['-format=sysv']]:
+    for _ in [cmd, cmd + ['-format=sysv']]:
       output = self.run_process(cmd, stdout=PIPE).stdout
       self.assertContained(expected, output)
 
@@ -580,7 +580,7 @@ f.close()
         # https://github.com/emscripten-core/emscripten/pull/5145: Check that CMake works even if EMCC_SKIP_SANITY_CHECK=1 is passed.
         if test_dir == 'target_html':
           env['EMCC_SKIP_SANITY_CHECK'] = '1'
-        print(str(cmd))
+        print(cmd)
         self.run_process(cmd, env=env, stdout=None if EM_BUILD_VERBOSE >= 2 else PIPE, stderr=None if EM_BUILD_VERBOSE >= 1 else PIPE)
 
         # Build
@@ -606,7 +606,7 @@ f.close()
 
     with temp_directory(self.get_dir()):
       cmd = [EMCMAKE, 'cmake', test_file('cmake', 'stdproperty')]
-      print(str(cmd))
+      print(cmd)
       emscripten_features = self.run_process(cmd, stdout=PIPE).stdout
 
     native_features = '\n'.join([x for x in native_features.split('\n') if '***' in x])
@@ -624,10 +624,10 @@ f.close()
       configure = [EMCMAKE, 'cmake', test_file('cmake', 'cmake_with_emval')] + args
       if WINDOWS:
         configure += ['-G', 'Ninja']
-      print(str(configure))
+      print(configure)
       self.run_process(configure)
       build = ['cmake', '--build', '.']
-      print(str(build))
+      print(build)
       self.run_process(build)
 
       out = self.run_process(config.NODE_JS + ['cmake_with_emval.js'], stdout=PIPE).stdout
@@ -1139,6 +1139,7 @@ int f() {
 
     shutil.copyfile(test_file('hello_world.c'), 'main.c')
 
+    WARNING = 'encountered. If this is to a local system header/library, it may cause problems (local system files make sense for compiling natively on your system, but not necessarily to JavaScript)'
     for args, expected in [(['-I/usr/something', '-Wwarn-absolute-paths'], True),
                            (['-L/usr/something', '-Wwarn-absolute-paths'], True),
                            (['-I/usr/something'], False),
@@ -1150,7 +1151,6 @@ int f() {
                            ([], False)]:
       print(args, expected)
       proc = self.run_process([EMCC, 'main.c'] + args, stderr=PIPE)
-      WARNING = 'encountered. If this is to a local system header/library, it may cause problems (local system files make sense for compiling natively on your system, but not necessarily to JavaScript)'
       self.assertContainedIf(WARNING, proc.stderr, expected)
 
   def test_local_link(self):
@@ -1751,13 +1751,13 @@ int f() {
             self.assertContained('error: undefined symbol: something', proc.stderr)
             self.assertContained('error: undefined symbol: elsey', proc.stderr)
             check_success = False
-          elif action == 'ERROR' and not value:
+          elif action == 'ERROR':
             # Error disables, should only warn
             self.assertContained('warning: undefined symbol: something', proc.stderr)
             self.assertContained('warning: undefined symbol: elsey', proc.stderr)
             self.assertNotContained('undefined symbol: emscripten_', proc.stderr)
             check_success = True
-          elif action == 'WARN' and not value:
+          elif action == 'WARN':
             # Disabled warning should imply disabling errors
             self.assertNotContained('undefined symbol', proc.stderr)
             check_success = True
@@ -2035,9 +2035,7 @@ int f() {
         self.run_process([EMCC, test_file('hello_world.cpp'), '-O' + str(opts)], stderr=PIPE, env=env)
         if debug is None:
           self.assertFalse(os.path.exists(self.canonical_temp_dir))
-        elif debug == '1':
-          self.assertExists(os.path.join(self.canonical_temp_dir, 'emcc-3-original.js'))
-        elif debug == '2':
+        elif debug in ['1', '2']:
           self.assertExists(os.path.join(self.canonical_temp_dir, 'emcc-3-original.js'))
 
   def test_debuginfo(self):
@@ -2180,9 +2178,7 @@ int f() {
         (['--bind', '-O2', '-s', 'ALLOW_MEMORY_GROWTH', test_file('embind', 'isMemoryGrowthEnabled=true.cpp')]),
     ]
     without_utf8_args = ['-s', 'EMBIND_STD_STRING_IS_UTF8=0']
-    test_cases_without_utf8 = []
-    for args in test_cases:
-        test_cases_without_utf8.append((args + without_utf8_args))
+    test_cases_without_utf8 = [args + without_utf8_args for args in test_cases]
     test_cases += test_cases_without_utf8
     test_cases.extend([(args[:] + ['-s', 'DYNAMIC_EXECUTION=0']) for args in test_cases])
     # closure compiler doesn't work with DYNAMIC_EXECUTION=0
@@ -3456,9 +3452,7 @@ int main()
     for wasm in [0, 1]:
       for opts in [0, 1]:
         for asserts in [0, 1]:
-          extra = []
-          if opts != 1 - asserts:
-            extra = ['-s', 'ASSERTIONS=' + str(asserts)]
+          extra = ['-s', 'ASSERTIONS=' + str(asserts)] if opts != 1 - asserts else []
           cmd = [EMCC, test_file('sillyfuncast2_noasm.ll'), '-O' + str(opts), '-s', 'WASM=' + str(wasm)] + extra
           print(opts, asserts, wasm, cmd)
           # Should not need to pipe stdout here but binaryen writes to stdout
@@ -3499,10 +3493,7 @@ int main()
     self.assertNotContained(warning, err)
 
   def test_valid_abspath_2(self):
-    if WINDOWS:
-      abs_include_path = 'C:\\nowhere\\at\\all'
-    else:
-      abs_include_path = '/nowhere/at/all'
+    abs_include_path = 'C:\\nowhere\\at\\all' if WINDOWS else '/nowhere/at/all'
     cmd = [EMCC, test_file('hello_world.c'), '--valid-abspath', abs_include_path, '-I%s' % abs_include_path]
     print(' '.join(cmd))
     self.run_process(cmd)
@@ -3528,8 +3519,7 @@ int main()
       # check that the map is correct
       with open(symbols_file) as f:
         symbols = f.read()
-      lines = [line.split(':') for line in symbols.strip().split('\n')]
-      return lines
+      return [line.split(':') for line in symbols.strip().split('\n')]
 
     def get_minified_middle(symbols_file):
       minified_middle = None
@@ -5173,7 +5163,7 @@ int main() {
 
   def test_file_packager_huge(self):
     MESSAGE = 'warning: file packager is creating an asset bundle of 257 MB. this is very large, and browsers might have trouble loading it'
-    create_file('huge.dat', 'a' * (1024 * 1024 * 257))
+    create_file('huge.dat', 'a' * (1024**2 * 257))
     create_file('tiny.dat', 'a')
     err = self.run_process([FILE_PACKAGER, 'test.data', '--preload', 'tiny.dat'], stdout=PIPE, stderr=PIPE).stderr
     self.assertNotContained(MESSAGE, err)
@@ -6331,9 +6321,7 @@ int main() {
     self.expect_fail([EMCC, 'src.cpp', '-Oz'])
 
   def test_eval_ctors_non_terminating(self):
-    for wasm in (1, 0):
-      print('wasm', wasm)
-      src = r'''
+    src = r'''
         struct C {
           C() {
             volatile int y = 0;
@@ -6343,6 +6331,8 @@ int main() {
         C always;
         int main() {}
       '''
+    for wasm in (1, 0):
+      print('wasm', wasm)
       create_file('src.cpp', src)
       self.run_process([EMCC, 'src.cpp', '-O2', '-s', 'EVAL_CTORS', '-profiling-funcs', '-s', 'WASM=%d' % wasm])
 
@@ -6646,11 +6636,7 @@ int main() {
           for f in files:
             print(str(cmd) + ' ' + str(params) + ' ' + eol + ' ' + f)
             self.assertExists(f)
-            if eol == 'linux':
-              expected_ending = '\n'
-            else:
-              expected_ending = '\r\n'
-
+            expected_ending = '\n' if eol == 'linux' else '\r\n'
             ret = line_endings.check_line_endings(f, expect_only=expected_ending)
             assert ret == 0
 
@@ -6679,13 +6665,12 @@ int main() {
       if '-g' in args:
         # With -g we get full dwarf info which means we there are many occurances of malloc
         self.assertGreater(code.count(b'malloc'), 2)
+      elif expect_names:
+        # name section adds the name of malloc (there is also another one for the export)
+        self.assertEqual(code.count(b'malloc'), 2)
       else:
-        if expect_names:
-          # name section adds the name of malloc (there is also another one for the export)
-          self.assertEqual(code.count(b'malloc'), 2)
-        else:
-          # should be just malloc for the export
-          self.assertEqual(code.count(b'malloc'), 1)
+        # should be just malloc for the export
+        self.assertEqual(code.count(b'malloc'), 1)
       sizes[str(args)] = os.path.getsize('a.out.wasm')
     print(sizes)
     # when -profiling-funcs, the size increases due to function names
@@ -7134,7 +7119,7 @@ int main() {
   def test_sysconf_phys_pages(self):
     def run(args, expected):
       cmd = [EMCC, test_file('unistd', 'sysconf_phys_pages.c')] + args
-      print(str(cmd))
+      print(cmd)
       self.run_process(cmd)
       result = self.run_js('a.out.js').strip()
       self.assertEqual(result, f'{expected}, errno: 0')
@@ -8056,15 +8041,6 @@ test_module().then((test_module_instance) => {
 
   def test_asyncify_response_file(self):
     return self.skipTest(' TODO remove the support for multiple binaryen versions warning output ("function name" vs "pattern" etc).')
-    create_file('a.txt', r'''[
-  "DOS_ReadFile(unsigned short, unsigned char*, unsigned short*, bool)"
-]
-''')
-    proc = self.run_process([EMCC, test_file('hello_world.c'), '-s', 'ASYNCIFY', '-s', "ASYNCIFY_ONLY=@a.txt"], stdout=PIPE, stderr=PIPE)
-    # we should parse the response file properly, and then issue a proper warning for the missing function
-    self.assertContained(
-        'Asyncify onlylist contained a non-matching pattern: DOS_ReadFile(unsigned short, unsigned char*, unsigned short*, bool)',
-        proc.stderr)
 
   def test_asyncify_advise(self):
     src = test_file('other', 'asyncify_advise.c')

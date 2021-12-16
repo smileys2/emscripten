@@ -40,7 +40,11 @@ def compute_minimal_runtime_initializer_and_exports(post, exports, receiving):
   exports_that_are_not_initializers = [asmjs_mangle(x) for x in exports_that_are_not_initializers]
 
   # Decide whether we should generate the global dynCalls dictionary for the dynCall() function?
-  if shared.Settings.DYNCALLS and '$dynCall' in shared.Settings.DEFAULT_LIBRARY_FUNCS_TO_INCLUDE and len([x for x in exports_that_are_not_initializers if x.startswith('dynCall_')]) > 0:
+  if (shared.Settings.DYNCALLS
+      and '$dynCall' in shared.Settings.DEFAULT_LIBRARY_FUNCS_TO_INCLUDE and [
+          x for x in exports_that_are_not_initializers
+          if x.startswith('dynCall_')
+      ]):
     exports_that_are_not_initializers += ['dynCalls = {}']
 
   declares = 'var ' + ',\n '.join(exports_that_are_not_initializers) + ';'
@@ -123,12 +127,8 @@ def update_settings_glue(metadata, DEBUG):
     shared.Settings.DEFAULT_LIBRARY_FUNCS_TO_INCLUDE += ['$readAsmConstArgs']
 
   shared.Settings.BINARYEN_FEATURES = metadata['features']
-  if shared.Settings.RELOCATABLE:
-    # When building relocatable output (e.g. MAIN_MODULE) the reported table
-    # size does not include the reserved slot at zero for the null pointer.
-    # Instead we use __table_base to offset the elements by 1.
-    if shared.Settings.INITIAL_TABLE == -1:
-      shared.Settings.INITIAL_TABLE = metadata['tableSize'] + 1
+  if shared.Settings.RELOCATABLE and shared.Settings.INITIAL_TABLE == -1:
+    shared.Settings.INITIAL_TABLE = metadata['tableSize'] + 1
 
   # When using dynamic linking the main function might be in a side module.
   # To be safe assume they do take input parametes.
@@ -320,7 +320,7 @@ def emscript(in_wasm, out_wasm, outfile_js, memfile, DEBUG):
     exports += ['asyncify_start_unwind', 'asyncify_stop_unwind', 'asyncify_start_rewind', 'asyncify_stop_rewind']
 
   all_exports = exports + list(metadata['namedGlobals'].keys())
-  all_exports = set([asmjs_mangle(e) for e in all_exports])
+  all_exports = {asmjs_mangle(e) for e in all_exports}
   report_missing_symbols(all_exports, pre)
 
   if not outfile_js:
@@ -371,7 +371,7 @@ def remove_trailing_zeros(memfile):
   with open(memfile, 'rb') as f:
     mem_data = f.read()
   end = len(mem_data)
-  while end > 0 and (mem_data[end - 1] == b'\0' or mem_data[end - 1] == 0):
+  while end > 0 and mem_data[end - 1] in [b'\0', 0]:
     end -= 1
   with open(memfile, 'wb') as f:
     f.write(mem_data[:end])
@@ -402,13 +402,12 @@ def finalize_wasm(infile, outfile, memfile, DEBUG):
   if shared.Settings.DYNCALLS:
     # we need to add all dyncalls to the wasm
     modify_wasm = True
+  elif shared.Settings.WASM_BIGINT:
+    args.append('--no-dyncalls')
   else:
-    if shared.Settings.WASM_BIGINT:
-      args.append('--no-dyncalls')
-    else:
-      args.append('--dyncalls-i64')
-      # we need to add some dyncalls to the wasm
-      modify_wasm = True
+    args.append('--dyncalls-i64')
+    # we need to add some dyncalls to the wasm
+    modify_wasm = True
   if shared.Settings.LEGALIZE_JS_FFI:
     # When we dynamically link our JS loader adds functions from wasm modules to
     # the table. It must add the original versions of them, not legalized ones,
@@ -456,19 +455,17 @@ def finalize_wasm(infile, outfile, memfile, DEBUG):
 
 def create_asm_consts(metadata):
   asm_consts = {}
+  max_arity = 16
   for addr, const in metadata['asmConsts'].items():
     const = trim_asm_const_body(const)
-    args = []
-    max_arity = 16
     arity = 0
     for i in range(max_arity):
       if ('$' + str(i)) in const:
         arity = i + 1
-    for i in range(arity):
-      args.append('$' + str(i))
+    args = ['$' + str(i) for i in range(arity)]
     const = 'function(' + ', '.join(args) + ') {' + const + '}'
     asm_consts[int(addr)] = const
-  asm_consts = [(key, value) for key, value in asm_consts.items()]
+  asm_consts = list(asm_consts.items())
   asm_consts.sort()
   return asm_consts
 
@@ -480,10 +477,7 @@ def create_em_js(forwarded_json, metadata):
     assert separator in raw
     args, body = raw.split(separator, 1)
     args = args[1:-1]
-    if args == 'void':
-      args = []
-    else:
-      args = args.split(',')
+    args = [] if args == 'void' else args.split(',')
     arg_names = [arg.split()[-1].replace("*", "") for arg in args if arg]
     func = 'function {}({}){}'.format(name, ','.join(arg_names), body)
     em_js_funcs.append(func)
@@ -699,37 +693,19 @@ def create_receiving(exports):
   # with WASM_ASYNC_COMPILATION that asm object may not exist at this point in time
   # so we need to support delayed assignment.
   delay_assignment = shared.Settings.WASM_ASYNC_COMPILATION and not shared.Settings.MINIMAL_RUNTIME
-  if not delay_assignment:
-    if shared.Settings.MINIMAL_RUNTIME:
-      # In Wasm exports are assigned inside a function to variables existing in top level JS scope, i.e.
-      # var _main;
-      # WebAssembly.instantiate(Module["wasm"], imports).then((function(output) {
-      # var asm = output.instance.exports;
-      # _main = asm["_main"];
-      generate_dyncall_assignment = shared.Settings.DYNCALLS and '$dynCall' in shared.Settings.DEFAULT_LIBRARY_FUNCS_TO_INCLUDE
-      for s in exports_that_are_not_initializers:
-        mangled = asmjs_mangle(s)
-        dynCallAssignment = ('dynCalls["' + s.replace('dynCall_', '') + '"] = ') if generate_dyncall_assignment and mangled.startswith('dynCall_') else ''
-        receiving += [dynCallAssignment + mangled + ' = asm["' + s + '"];']
-    else:
-      if shared.Settings.MINIMAL_RUNTIME:
-        # In wasm2js exports can be directly processed at top level, i.e.
-        # var asm = Module["asm"](asmLibraryArg, buffer);
-        # var _main = asm["_main"];
-        if shared.Settings.USE_PTHREADS and shared.Settings.MODULARIZE:
-          # TODO: As a temp solution, multithreaded MODULARIZED MINIMAL_RUNTIME builds export all
-          # symbols like regular runtime does.
-          # Fix this by migrating worker.js code to reside inside the Module so it is in the same
-          # scope as the rest of the JS code, or by defining an export syntax to MINIMAL_RUNTIME
-          # that multithreaded MODULARIZEd builds can export on.
-          receiving += [asmjs_mangle(s) + ' = Module["' + asmjs_mangle(s) + '"] = asm["' + s + '"];' for s in exports_that_are_not_initializers]
-        else:
-          receiving += ['var ' + asmjs_mangle(s) + ' = asm["' + asmjs_mangle(s) + '"];' for s in exports_that_are_not_initializers]
-      else:
-        receiving += make_export_wrappers(exports, delay_assignment)
+  if not delay_assignment and shared.Settings.MINIMAL_RUNTIME:
+    # In Wasm exports are assigned inside a function to variables existing in top level JS scope, i.e.
+    # var _main;
+    # WebAssembly.instantiate(Module["wasm"], imports).then((function(output) {
+    # var asm = output.instance.exports;
+    # _main = asm["_main"];
+    generate_dyncall_assignment = shared.Settings.DYNCALLS and '$dynCall' in shared.Settings.DEFAULT_LIBRARY_FUNCS_TO_INCLUDE
+    for s in exports_that_are_not_initializers:
+      mangled = asmjs_mangle(s)
+      dynCallAssignment = ('dynCalls["' + s.replace('dynCall_', '') + '"] = ') if generate_dyncall_assignment and mangled.startswith('dynCall_') else ''
+      receiving += [dynCallAssignment + mangled + ' = asm["' + s + '"];']
   else:
     receiving += make_export_wrappers(exports, delay_assignment)
-
   if shared.Settings.MINIMAL_RUNTIME:
     return '\n  '.join(receiving) + '\n'
   else:
@@ -739,9 +715,8 @@ def create_receiving(exports):
 def create_module(sending, receiving, invoke_funcs, metadata):
   invoke_wrappers = create_invoke_wrappers(invoke_funcs)
   receiving += create_named_globals(metadata)
-  module = []
+  module = ['var asmLibraryArg = %s;\n' % sending]
 
-  module.append('var asmLibraryArg = %s;\n' % (sending))
   if shared.Settings.ASYNCIFY and shared.Settings.ASSERTIONS:
     module.append('Asyncify.instrumentWasmImports(asmLibraryArg);\n')
 
